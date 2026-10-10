@@ -1,5 +1,4 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#0f161c"></head><body>
-<meta charset="utf-8">
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#0f161c"></head><body><meta charset="utf-8">
 <title>Stand Halles de Biarritz</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&display=swap">
 <style>
@@ -120,12 +119,12 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 0.9;
 renderer.xr.enabled = true;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xe7e3db);
-scene.fog = new THREE.Fog(0xe7e3db, 12, 40);
+scene.background = new THREE.Color(0xcfc7ba);
+scene.fog = new THREE.Fog(0xcfc7ba, 18, 60);
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
 
@@ -194,7 +193,12 @@ const drawMetroR = (g, w, h) => {           // roughness/bump for the metro tile
   const tw = w / 2, th = h / 2;
   for (let r = 0; r < 2; r++) for (let i = -1; i < 3; i++) { const x = i * tw + (r ? tw / 2 : 0), y = r * th; g.fillStyle = '#3c3c3c'; g.fillRect(x + 3, y + 3, tw - 6, th - 6); }
 };
+const drawBaffle = (g, w, h) => {           // hood baffle filter: 8 channels per canvas (≈ 5 cm pitch on a 0.42 m filter), lit rim on each channel
+  g.fillStyle = '#3b4044'; g.fillRect(0, 0, w, h);
+  for (let x = 0; x < w; x += 32) { g.fillStyle = '#8d9397'; g.fillRect(x + 4, 0, 10, h); g.fillStyle = '#c9ced2'; g.fillRect(x + 14, 0, 3, h); g.fillStyle = '#23272a'; g.fillRect(x + 17, 0, 6, h); }
+};
 const T = {
+  baffle: (rx, ry) => mkTex(256, 64, drawBaffle, rx, ry),
   floor: (rx, ry) => mkTex(256, 256, drawFloor, rx, ry),
   metro: (rx, ry) => mkTex(256, 128, drawMetro, rx, ry),
   metroR: (rx, ry) => mkTex(256, 128, drawMetroR, rx, ry, true),
@@ -206,9 +210,9 @@ const brushA = T.brush(2, 2), brushB = T.brush(3, 1.5);
 
 // ---------- Materials ----------
 const M = {
-  inox: new THREE.MeshPhysicalMaterial({ color: 0xd2d5d8, metalness: 1, roughness: 0.46, roughnessMap: brushA, bumpMap: brushA, bumpScale: 0.0012, anisotropy: 0.7, envMapIntensity: 1.15 }),
-  inoxDoor: new THREE.MeshPhysicalMaterial({ color: 0xc4c8cc, metalness: 1, roughness: 0.42, roughnessMap: brushB, bumpMap: brushB, bumpScale: 0.0012, anisotropy: 0.8, envMapIntensity: 1.15 }),
-  inoxDark: new THREE.MeshStandardMaterial({ color: 0x8f959a, metalness: 0.9, roughness: 0.48, roughnessMap: brushB }),
+  inox: new THREE.MeshPhysicalMaterial({ color: 0xcdd0d3, metalness: 1, roughness: 0.46, roughnessMap: brushA, bumpMap: brushA, bumpScale: 0.0012, anisotropy: 0.7, envMapIntensity: 0.65 }),
+  inoxDoor: new THREE.MeshPhysicalMaterial({ color: 0xbfc3c7, metalness: 1, roughness: 0.42, roughnessMap: brushB, bumpMap: brushB, bumpScale: 0.0012, anisotropy: 0.8, envMapIntensity: 0.65 }),
+  inoxDark: new THREE.MeshStandardMaterial({ color: 0x7e8488, metalness: 0.9, roughness: 0.48, roughnessMap: brushB, envMapIntensity: 0.7 }),
   plate: new THREE.MeshStandardMaterial({ color: 0x50555a, metalness: 1, roughness: 0.62, roughnessMap: brushA }),
   alu: new THREE.MeshStandardMaterial({ color: 0xdadcdc, metalness: 0.7, roughness: 0.45 }),
   brass: new THREE.MeshStandardMaterial({ color: 0xb8925a, metalness: 1, roughness: 0.3 }),
@@ -223,23 +227,27 @@ const M = {
   fridgeIn: new THREE.MeshStandardMaterial({ color: 0xdbe8f3, emissive: 0x8fb8d8, emissiveIntensity: 0.4, roughness: 0.6 }),
   bottle: new THREE.MeshPhysicalMaterial({ color: 0x7db6e8, transparent: true, opacity: 0.8, roughness: 0.15, metalness: 0 }),
   white: new THREE.MeshStandardMaterial({ color: 0xf4f3ef, roughness: 0.55 }),
-  paint: new THREE.MeshStandardMaterial({ color: 0xe9e5dc, roughness: 0.95 }),
+  paint: new THREE.MeshStandardMaterial({ color: 0xd9d5cc, roughness: 0.95 }),
   stone: new THREE.MeshStandardMaterial({ map: T.stone(4, 1), roughness: 0.28, metalness: 0.05, envMapIntensity: 0.9 }),
   laminate: new THREE.MeshStandardMaterial({ color: 0xcdc7bd, roughness: 0.6 }),
-  hall: new THREE.MeshStandardMaterial({ color: 0xd9d3c8, roughness: 0.9 }),
-  roof: new THREE.MeshStandardMaterial({ color: 0x6e6861, roughness: 0.9, side: THREE.DoubleSide }),
+  hallWall: new THREE.MeshStandardMaterial({ color: 0xb3a692, roughness: 0.95 }),
+  iron: new THREE.MeshStandardMaterial({ color: 0x2c3632, metalness: 0.55, roughness: 0.55 }),
+  daylight: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xe6eef5, emissiveIntensity: 1.8, roughness: 1 }),
+  glassRoof: new THREE.MeshStandardMaterial({ color: 0x5f6a74, emissive: 0x9fb0c0, emissiveIntensity: 0.42, roughness: 1, side: THREE.DoubleSide }),
+  crate: new THREE.MeshStandardMaterial({ color: 0x9a7b55, roughness: 0.85 }),
   tilesFloor: new THREE.MeshStandardMaterial({ map: T.floor(5.283 / 1.2, 2.734 / 1.2), roughness: 0.55, metalness: 0.05 }),
-  hallFloor: new THREE.MeshStandardMaterial({ color: 0xcfc8bb, roughness: 0.85 }),
+  hallFloor: new THREE.MeshStandardMaterial({ color: 0xa8a299, roughness: 0.85 }),
   metroS: new THREE.MeshStandardMaterial({ map: T.metro(4.933 / 0.3, 1.8 / 0.15), roughnessMap: T.metroR(4.933 / 0.3, 1.8 / 0.15), bumpMap: T.metroR(4.933 / 0.3, 1.8 / 0.15), bumpScale: -0.006, roughness: 1, metalness: 0.02 }),
   metroW: new THREE.MeshStandardMaterial({ map: T.metro(2.184 / 0.3, 1.8 / 0.15), roughnessMap: T.metroR(2.184 / 0.3, 1.8 / 0.15), bumpMap: T.metroR(2.184 / 0.3, 1.8 / 0.15), bumpScale: -0.006, roughness: 1, metalness: 0.02 }),
   woodN: new THREE.MeshStandardMaterial({ map: T.wood(5.283, 1.05), roughness: 0.55 }),
   woodE: new THREE.MeshStandardMaterial({ map: T.wood(1.5, 1.05), roughness: 0.55 }),
 };
 M.stoneE = M.stone.clone();                       // east bar top (other orientation)
+M.hood = M.inox.clone(); M.hood.envMapIntensity = 0.4; M.hood.color.set(0xb9bdc1); M.hood.roughness = 0.9; M.hood.anisotropy = 0.2;   // hood canopy: large flat panel, reads mid-grey like in the reference renders
 { // real PBR maps swapped in when they arrive (repeat = surface size / real size of one tile of texture)
   const NS = s => ({ normalScale: new THREE.Vector2(s, s) }), C = c => ({ color: new THREE.Color(c) });
   const mS = [4.933 / 1.5, 1.5], mW = [2.184 / 1.5, 1.5], sN = [5.583 / 0.35, 1], sE = [1, 1.696 / 0.3], wN = [5.283, 2.1], wE = [1.5, 2.1], fH = [12.5, 12.5], fS = [5.283 / 2.4, 2.734 / 2.4];
-  apply('metro_c.jpg', true, [[M.metroS, 'map', ...mS], [M.metroW, 'map', ...mW]]);
+  apply('metro_c.jpg', true, [[M.metroS, 'map', ...mS, C(0xd8d6d0)], [M.metroW, 'map', ...mW, C(0xd8d6d0)]]);
   apply('metro_r.jpg', false, [[M.metroS, 'roughnessMap', ...mS, { roughness: 1 }], [M.metroW, 'roughnessMap', ...mW, { roughness: 1 }]]);
   apply('metro_n.jpg', false, [[M.metroS, 'normalMap', ...mS, { bumpMap: null, ...NS(0.7) }], [M.metroW, 'normalMap', ...mW, { bumpMap: null, ...NS(0.7) }]]);
   apply('granite_c.jpg', true, [[M.stone, 'map', ...sN, C(0xd2cec9)], [M.stoneE, 'map', ...sE, C(0xd2cec9)]]);
@@ -248,21 +256,21 @@ M.stoneE = M.stone.clone();                       // east bar top (other orienta
   apply('wood_c.jpg', true, [[M.woodN, 'map', ...wN], [M.woodE, 'map', ...wE]]);
   apply('wood_r.jpg', false, [[M.woodN, 'roughnessMap', ...wN, { roughness: 1.4 }], [M.woodE, 'roughnessMap', ...wE, { roughness: 1.4 }]]);
   apply('wood_n.jpg', false, [[M.woodN, 'normalMap', ...wN, NS(0.6)], [M.woodE, 'normalMap', ...wE, NS(0.6)]]);
-  apply('floor_c.jpg', true, [[M.hallFloor, 'map', ...fH, C(0xd6d0c6)], [M.tilesFloor, 'map', ...fS, C(0xa6aaad)]]);
-  apply('floor_r.jpg', false, [[M.hallFloor, 'roughnessMap', ...fH, { roughness: 1.2 }], [M.tilesFloor, 'roughnessMap', ...fS, { roughness: 1.1 }]]);
+  apply('floor_c.jpg', true, [[M.hallFloor, 'map', ...fH, C(0xaea89e)], [M.tilesFloor, 'map', ...fS, C(0x84888c)]]);
+  apply('floor_r.jpg', false, [[M.hallFloor, 'roughnessMap', ...fH, { roughness: 1.1 }], [M.tilesFloor, 'roughnessMap', ...fS, { roughness: 0.9 }]]);
   apply('floor_n.jpg', false, [[M.hallFloor, 'normalMap', ...fH, NS(0.5)], [M.tilesFloor, 'normalMap', ...fS, NS(0.5)]]);
-  apply('metal_c.jpg', true, [[M.inox, 'map', 2, 2, C(0xf0f2f4)], [M.inoxDoor, 'map', 3, 1.5, C(0xe4e7ea)], [M.inoxDark, 'map', 2, 2, C(0xa4a9ad)]]);
+  apply('metal_c.jpg', true, [[M.inox, 'map', 2, 2, C(0xe8ebee)], [M.inoxDoor, 'map', 3, 1.5, C(0xdfe2e5)], [M.inoxDark, 'map', 2, 2, C(0x8f949a)], [M.hood, 'map', 2, 2, C(0xcfd3d7)]]);
   // stainless roughness = brushed streaks + the real scratches/smudges of the metal (added in a canvas)
   loadTex('metal_r.jpg', false, t => {
     const mk = (base, rx, ry) => mkTex(1024, 1024, (g, w, h) => { g.drawImage(base.image, 0, 0, w, h); g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.9; g.drawImage(t.image, 0, 0, w, h); }, rx, ry, true);
-    upd(M.inox, { roughnessMap: mk(brushA, 2, 2), roughness: 0.36 }); upd(M.inoxDoor, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.32 }); upd(M.inoxDark, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.5 });
+    upd(M.inox, { roughnessMap: mk(brushA, 2, 2), roughness: 0.36 }); upd(M.inoxDoor, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.32 }); upd(M.inoxDark, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.5 }); upd(M.hood, { roughnessMap: mk(brushA, 2, 2), roughness: 0.9 });   // matte enough that the pendant highlights stay soft on the big panel
   });
 }
 
 // ---------- Builders ----------
 const obstacles = [];
 const addObs = (x0, z0, x1, z1) => obstacles.push({ x0, z0, x1, z1 });
-const ROUNDED = new Set([M.inox, M.inoxDoor, M.inoxDark, M.plate, M.alu]);   // sheet-metal boxes get a small bevel (catches the light)
+const ROUNDED = new Set([M.inox, M.inoxDoor, M.inoxDark, M.plate, M.alu, M.hood]);   // sheet-metal boxes get a small bevel (catches the light)
 function B(x, y, z, w, h, d, mat, obs) {        // box from its min corner
   const r = ROUNDED.has(mat) ? Math.min(0.007, w / 4, h / 4, d / 4) : 0;
   const m = new THREE.Mesh(r > 0 ? new RoundedBoxGeometry(w, h, d, 2, r) : new THREE.BoxGeometry(w, h, d), mat);
@@ -280,17 +288,49 @@ function legs(x0, z0, x1, z1, h, inset = 0.04) {
 const labels = [];
 const L = (code, name, x, y, z, exist) => labels.push({ code, name, x, y, z, exist });
 
-// ---------- Hall (Halles) ----------
+// ---------- Hall (Halles): 19th-century iron-and-glass market hall — stone walls with arched windows (daylight), round iron columns, glass roof on iron beams, warm pendants, produce stalls ----------
 {
+  const X0 = -20, X1 = 25, Z0 = -12, Z1 = 14, H = 6.8;        // hall interior, metres
   const hf = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), M.hallFloor); hf.rotation.x = -Math.PI / 2; hf.position.set(2.4, -0.002, 1); hf.receiveShadow = true; scene.add(hf);
-  const roof = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), M.roof); roof.rotation.x = Math.PI / 2; roof.position.set(2.4, 6.8, 1); roof.userData.ceiling = true; scene.add(roof);
-  for (const [x, z] of [[-3.5, -3.2], [2.4, -3.2], [8.3, -3.2], [8.6, 2.5], [8.6, 8], [-3.5, 8], [2.4, 8]]) B(x - 0.18, 0, z - 0.18, 0.36, 6.8, 0.36, M.hall);
-  for (let i = -2; i < 4; i++) B(-12, 6.2, -4 + i * 5, 36, 0.4, 0.3, M.hall).userData.ceiling = true;   // roof beams
-  const lum = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff1d6, emissiveIntensity: 3.2, roughness: 0.5 });   // hall luminaires (seen in the stainless reflections)
-  for (let x = -14; x <= 18; x += 8) for (const z of [-7, 9]) {
-    const disc = Cyl(x, 5.25, z, 0.34, 0.08, lum); disc.castShadow = false; disc.userData.ceiling = true;
-    const rod = B(x - 0.015, 5.29, z - 0.015, 0.03, 1.5, 0.03, M.black); rod.castShadow = false; rod.userData.ceiling = true;
+  const roof = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, Z1 - Z0), M.glassRoof); roof.rotation.x = Math.PI / 2; roof.position.set((X0 + X1) / 2, H, (Z0 + Z1) / 2); roof.userData.ceiling = true; scene.add(roof);
+  B(X0 - 0.3, 0, Z0 - 0.3, X1 - X0 + 0.6, H, 0.3, M.hallWall); B(X0 - 0.3, 0, Z1, X1 - X0 + 0.6, H, 0.3, M.hallWall);
+  B(X0 - 0.3, 0, Z0, 0.3, H, Z1 - Z0, M.hallWall); B(X1, 0, Z0, 0.3, H, Z1 - Z0, M.hallWall);
+  function archWindow(x, z, rotY) {                           // 2.2 m wide, sill 1.6 m, semicircular top at 5.2 m, iron mullions
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rotY; scene.add(g);
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.5), M.daylight); pane.position.set(0, 2.85, 0.006); g.add(pane);
+    const top = new THREE.Mesh(new THREE.CircleGeometry(1.1, 24, 0, Math.PI), M.daylight); top.position.set(0, 4.1, 0.006); g.add(top);
+    const bar = (w, h, px, py) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), M.iron); m.position.set(px, py, 0.03); g.add(m); };
+    bar(0.05, 3.5, -0.37, 3.35); bar(0.05, 3.5, 0.37, 3.35); bar(2.2, 0.06, 0, 4.1); bar(2.2, 0.06, 0, 2.85); bar(2.6, 0.1, 0, 1.58);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.13, 0.045, 6, 24, Math.PI), M.iron); ring.position.set(0, 4.1, 0.03); g.add(ring);
   }
+  for (let x = X0 + 2.5; x < X1; x += 5) { archWindow(x, Z0, 0); archWindow(x, Z1, Math.PI); }
+  for (let z = Z0 + 3; z < Z1; z += 5) { archWindow(X0, z, Math.PI / 2); archWindow(X1, z, -Math.PI / 2); }
+  for (const [x, z] of [[-3.5, -3.2], [2.4, -3.2], [8.3, -3.2], [8.6, 2.5], [8.6, 8], [-3.5, 8], [2.4, 8], [-9.5, -3.2], [-9.5, 8], [14.5, -3.2], [14.5, 8]]) {
+    Cyl(x, H / 2, z, 0.16, H, M.iron); Cyl(x, 0.12, z, 0.26, 0.24, M.iron); B(x - 0.32, H - 0.9, z - 0.32, 0.64, 0.3, 0.64, M.iron).userData.ceiling = true;
+  }
+  for (let z = Z0 + 1; z < Z1; z += 5) B(X0, H - 0.5, z, X1 - X0, 0.4, 0.25, M.iron).userData.ceiling = true;      // roof beams
+  for (let x = X0 + 2.5; x < X1; x += 5) B(x, H - 0.3, Z0, 0.18, 0.22, Z1 - Z0, M.iron).userData.ceiling = true;  // purlins
+  const lum = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffe9c8, emissiveIntensity: 3.2, roughness: 0.5 });   // hall pendants (seen in the stainless reflections)
+  for (let x = -14; x <= 18; x += 8) for (const z of [-7, 9]) {
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.32, 0.3, 24, 1, true), M.shade); sh.position.set(x, 4.6, z); sh.userData.ceiling = true; scene.add(sh);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10), lum); bulb.position.set(x, 4.5, z); bulb.userData.ceiling = true; scene.add(bulb);
+    const rod = B(x - 0.015, 4.75, z - 0.015, 0.03, H - 4.75, 0.03, M.black); rod.castShadow = false; rod.userData.ceiling = true;
+  }
+  // market stalls around the aisle (wooden counter and shelves, crates of produce, a pendant each) — built in a local frame: 3 m wide, counter front at z 0, facing +z
+  const produce = [0xc8452a, 0x8ab04a, 0xe0a93a, 0x7b4a2d, 0xd9c8a8, 0x9b3d6b, 0x4f7f3a, 0xe8b86a].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }));
+  function stall(x, z, rot, i) {
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot; scene.add(g);
+    const b = (...a) => g.add(B(...a)), c = (...a) => g.add(Cyl(...a));
+    b(0, 0, -0.9, 3, 0.9, 0.9, M.woodN); b(-0.05, 0.9, -0.95, 3.1, 0.04, 1.0, M.woodE);
+    b(0, 0, -2.3, 3, 2.3, 0.35, M.woodE); for (let k = 0; k < 2; k++) b(0.03, 1.1 + k * 0.45, -2.3, 2.94, 0.03, 0.35, M.woodN);
+    for (let k = 0; k < 7; k++) { const cx = 0.12 + k * 0.41; b(cx, 0.94, -0.78, 0.36, 0.22, 0.52, M.crate); b(cx + 0.03, 1.16, -0.75, 0.30, 0.1, 0.46, produce[(i * 3 + k) % produce.length]); }
+    for (let r = 0; r < 2; r++) for (let k = 0; k < 6; k++) b(0.12 + k * 0.47, 1.13 + r * 0.45, -2.25, 0.42, 0.26, 0.28, produce[(k + r * 2 + i) % produce.length]);
+    b(0.2, 2.35, -2.05, 2.6, 0.35, 0.05, M.black);
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.22, 0.2, 24, 1, true), M.shade); sh.position.set(1.5, 2.55, -0.5); g.add(sh);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), M.lamp); bulb.position.set(1.5, 2.5, -0.5); g.add(bulb);
+    c(1.5, (2.65 + H) / 2, -0.5, 0.004, H - 2.65, M.black);
+  }
+  [[-6, -8.5, 0], [-1.5, -8.5, 0], [3, -8.5, 0], [7.5, -8.5, 0], [-9.5, -4, Math.PI / 2], [-9.5, 2.5, Math.PI / 2], [-9.5, 6, Math.PI / 2], [14.5, -7, -Math.PI / 2], [14.5, -2.5, -Math.PI / 2], [14.5, 4.5, -Math.PI / 2]].forEach(([x, z, rot], i) => stall(x, z, rot, i));
 }
 
 // ---------- Stand shell ----------
@@ -330,13 +370,13 @@ const W = 4.933, D = 2.184;                      // interior, metres
   L('C13', 'Four mixte compact', 0.355, 1.8, 1.83);
   // C10 neutral 400 + C11 induction
   B(0.70, 0.12, 1.484, 0.40, 0.78, 0.70, M.inox, true); legs(0.70, 1.484, 1.10, 2.184, 0.12);
-  B(0.71, 0.3, 1.482, 0.38, 0.5, 0.01, M.inoxDoor); B(0.73, 0.78, 1.47, 0.34, 0.015, 0.015, M.inoxDark);
+  B(0.705, 0.29, 1.4825, 0.39, 0.52, 0.004, M.plate); B(0.71, 0.3, 1.482, 0.38, 0.5, 0.01, M.inoxDoor); B(0.73, 0.78, 1.47, 0.34, 0.015, 0.015, M.inoxDark);   // dark reveal around the door
   L('C10', 'Élément neutre 400', 0.90, 1.22, 1.83);
   B(0.72, 0.9, 1.55, 0.36, 0.055, 0.60, M.black);
   for (const z of [1.72, 2.0]) { const r = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.11, 32), new THREE.MeshBasicMaterial({ color: 0x5b6066 })); r.rotation.x = -Math.PI / 2; r.position.set(0.90, 0.956, z); scene.add(r); }
   L('C11', 'Induction à poser', 0.90, 1.4, 1.83);
   // C09 refrigerated base, 6 drawers
-  B(1.10, 0.15, 1.484, 1.20, 0.47, 0.70, M.inox, true); legs(1.10, 1.484, 2.30, 2.184, 0.15);
+  B(1.10, 0.15, 1.484, 1.20, 0.47, 0.70, M.inoxDark, true); legs(1.10, 1.484, 2.30, 2.184, 0.15);   // dark body = dark seams between the drawer fronts
   for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { B(1.11 + i * 0.40, 0.17 + j * 0.23, 1.476, 0.38, 0.21, 0.01, M.inoxDoor); B(1.17 + i * 0.40, 0.34 + j * 0.23, 1.462, 0.26, 0.015, 0.015, M.inoxDark); }
   L('C09', 'Soubassement réfrigéré 6 tiroirs', 1.70, 0.5, 1.46);
   // C08 plancha, C07 neutral, C06 fryer (700 series tops)
@@ -355,15 +395,22 @@ const W = 4.933, D = 2.184;                      // interior, metres
   for (let k = 0; k < 5; k++) Cyl(1.30, 1.56, 1.90 + k * 0.06, 0.009, 1.20, M.inoxDark, 'x');
   B(0.70, 1.53, 1.884, 1.20, 0.025, 0.025, M.inox); B(0.70, 1.53, 2.14, 1.20, 0.025, 0.03, M.inox);
   for (const x of [0.76, 1.84]) B(x, 1.40, 1.95, 0.03, 0.13, 0.23, M.inoxDark);
+  for (const [x, r, h] of [[0.86, 0.11, 0.14], [1.13, 0.085, 0.19], [1.42, 0.13, 0.11], [1.73, 0.10, 0.16]]) {   // pots with lids and handles on the shelf
+    Cyl(x, 1.57 + h / 2, 2.02, r, h, M.inoxDoor); Cyl(x, 1.577 + h, 2.02, r + 0.006, 0.014, M.inoxDoor); Cyl(x, 1.59 + h, 2.02, 0.012, 0.03, M.black);
+    B(x - r - 0.035, 1.57 + h - 0.03, 2.01, 0.04, 0.02, 0.02, M.inoxDark); B(x + r, 1.57 + h - 0.03, 2.01, 0.04, 0.02, 0.02, M.inoxDark);
+  }
+  B(1.52, 0.90, 1.50, 0.36, 0.018, 0.24, M.white); B(1.53, 0.90, 1.79, 0.165, 0.10, 0.325, M.inoxDoor); B(1.715, 0.90, 1.79, 0.165, 0.10, 0.325, M.inoxDoor);   // cutting board + 2 GN 1/3 on the neutral
+  B(1.45, 0.0005, 0.95, 0.30, 0.004, 0.30, M.plate); for (let k = 0; k < 5; k++) B(1.47 + k * 0.06, 0.0045, 0.95, 0.015, 0.003, 0.30, M.inoxDark);   // floor drain grate
   L('C12', 'Étagère barreaudée 1 niveau', 1.30, 1.85, 2.0);
   // C21 hood
-  B(0, 2.1, 1.19, 2.50, 0.42, 0.994, M.inox); B(0.04, 2.0, 1.33, 2.42, 0.11, 0.80, M.inoxDark);
-  for (let i = 0; i < 5; i++) B(0.10 + i * 0.47, 2.0, 1.40, 0.42, 0.012, 0.5, M.plate);
+  B(0, 2.1, 1.19, 2.50, 0.42, 0.994, M.hood); B(0.04, 2.0, 1.33, 2.42, 0.11, 0.80, M.plate);   // canopy + dark filter housing
+  const baffle = new THREE.MeshStandardMaterial({ map: T.baffle(1, 1), metalness: 0.8, roughness: 0.42 });
+  for (let i = 0; i < 5; i++) { const f = B(0.10 + i * 0.47, 1.9, 1.5, 0.42, 0.012, 0.44, baffle); f.position.set(0.31 + i * 0.47, 1.965, 1.75); f.rotation.x = -0.3; }   // slanted baffle filters (lower edge 1.90 m, top inside the housing)
   B(1.05, 2.52, 1.75, 0.40, 0.3, 0.40, M.inoxDark);
   B(0.25, 2.092, 1.215, 2.0, 0.008, 0.07, M.lamp);                     // light strip under the hood lip
   L('C21', 'Hotte', 1.25, 2.7, 1.69);
   // C05 ice machine under a worktop, C04 slicer on it, C03 tilted wall shelf
-  B(2.32, 0.10, 1.65, 0.35, 0.62, 0.53, M.inox, true); B(2.33, 0.12, 1.645, 0.33, 0.16, 0.006, M.black); B(2.34, 0.30, 1.642, 0.31, 0.40, 0.006, M.inoxDoor);
+  B(2.32, 0.10, 1.65, 0.35, 0.62, 0.53, M.inox, true); B(2.33, 0.12, 1.645, 0.33, 0.16, 0.006, M.black); B(2.335, 0.295, 1.6435, 0.32, 0.41, 0.004, M.plate); B(2.34, 0.30, 1.642, 0.31, 0.40, 0.006, M.inoxDoor);
   L('C05', 'Machine à glaçons', 2.50, 0.75, 1.65, true);
   B(2.30, 0.86, 1.584, 1.934, 0.04, 0.60, M.inox, true); B(2.30, 0, 1.60, 0.03, 0.86, 0.03, M.inoxDark); B(2.30, 0, 2.15, 0.03, 0.86, 0.03, M.inoxDark);
   B(2.30, 0.90, 2.15, 1.934, 0.10, 0.034, M.inox);
@@ -442,16 +489,16 @@ const stoolX = [0.9, 1.9, 3.1, 4.1];
     Cyl(x, 4.85, -0.55, 0.004, 3.9, M.black);
     const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.17, 0.18, 24, 1, true), M.shade); sh.position.set(x, 2.88, -0.55); sh.castShadow = true; scene.add(sh);
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), M.lamp); bulb.position.set(x, 2.84, -0.55); scene.add(bulb);
-    const p = new THREE.PointLight(0xffe6c4, 1.3, 6, 2); p.position.set(x, 2.80, -0.55); scene.add(p);
+    const p = new THREE.PointLight(0xffe6c4, 0.7, 6, 2); p.position.set(x, 2.80, -0.55); scene.add(p);
   }
 }
 
 // ---------- Lights ----------
-scene.add(new THREE.HemisphereLight(0xffffff, 0x9a948c, 0.7));
-const sun = new THREE.DirectionalLight(0xfff3e4, 1.7); sun.position.set(4, 7.5, -4.5); sun.castShadow = true;
+scene.add(new THREE.HemisphereLight(0xe8eef4, 0x4a4540, 0.32));
+const sun = new THREE.DirectionalLight(0xfff3e4, 2.4); sun.position.set(4, 7.5, -4.5); sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -5, right: 9, top: 7, bottom: -7, near: 1, far: 25 });
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02; sun.target.position.set(2.5, 0, 1); scene.add(sun, sun.target);
-for (const x of [0.55, 1.25, 1.95]) { const p = new THREE.PointLight(0xfff0d8, 1.3, 4.5, 2); p.position.set(x, 2.06, 1.32); scene.add(p); }
+for (const x of [0.55, 1.25, 1.95]) { const p = new THREE.PointLight(0xfff0d8, 0.9, 4.5, 2); p.position.set(x, 2.06, 1.32); scene.add(p); }
 { const p = new THREE.PointLight(0xfff4e6, 0.8, 7, 2); p.position.set(3.6, 2.5, 0.4); scene.add(p); }
 
 // ---------- Reflections: capture the real stand (tiles, hood, hall, people) and use it as the environment; redone once the real assets are in ----------
@@ -678,5 +725,6 @@ function tick() {
 }
 setView('chef'); resize();
 renderer.setAnimationLoop(tick);
+window.DBG = { scene, renderer, camera, M, THREE };   // console access for tuning
 </script>
 </body></html>
