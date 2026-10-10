@@ -107,7 +107,6 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
@@ -142,7 +141,7 @@ function loadTex(file, srgb, cb) {
 }
 // one file → several materials, each with its own repeat (clones share the GPU image)
 const apply = (file, srgb, list) => loadTex(file, srgb, t => list.forEach(([m, key, rx, ry, extra]) => { const u = t.clone(); u.repeat.set(rx, ry); upd(m, { [key]: u, ...extra }); }));
-new RGBELoader(mgr).load('assets/hdr/hall.hdr', t => { t.mapping = THREE.EquirectangularReflectionMapping; scene.background = t; scene.backgroundBlurriness = 0.4; scene.backgroundIntensity = 0.8; });
+texLoader.load('assets/hdr/hall.jpg', t => { t.mapping = THREE.EquirectangularReflectionMapping; t.colorSpace = THREE.SRGBColorSpace; scene.background = t; scene.backgroundBlurriness = 0.4; scene.backgroundIntensity = 0.85; });
 
 const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 120);
 const pitchObj = new THREE.Object3D();
@@ -509,7 +508,7 @@ function addToque(o, rot) {
   scene.add(tq); head.attach(tq);                           // keeps the world placement, then follows the head
 }
 const gltfLoader = new GLTFLoader(mgr);
-[['chef_f', 0, true], ['chef_m', 1, true], ['client_f_sit', 2], ['client_m_sit', 3], ['client_m', 4]].forEach(([file, idx, toque]) => gltfLoader.load(`assets/people/${file}.glb`, gltf => {
+[['chef_f', 0, true], ['chef_m', 1, true], ['client_f_sit', 2], ['client_m_sit', 3], ['client_m', 4]].forEach(([file, idx, toque]) => gltfLoader.load(`assets/people/${file}.json`, gltf => {
   const old = people[idx], u = old.userData, o = gltf.scene;
   o.traverse(n => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; } });
   const box = new THREE.Box3().setFromObject(o), s = u.h / (box.max.y - box.min.y);
