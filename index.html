@@ -106,6 +106,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
@@ -142,7 +143,7 @@ function loadTex(file, srgb, cb) {
 const apply = (file, srgb, list) => loadTex(file, srgb, t => list.forEach(([m, key, rx, ry, extra]) => { const u = t.clone(); u.repeat.set(rx, ry); upd(m, { [key]: u, ...extra }); }));
 texLoader.load('assets/hdr/hall.jpg', t => { t.mapping = THREE.EquirectangularReflectionMapping; t.colorSpace = THREE.SRGBColorSpace; scene.background = t; scene.backgroundBlurriness = 0.4; scene.backgroundIntensity = 0.85; });
 
-const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 120);
+const camera = new THREE.PerspectiveCamera(64, 1, 0.05, 120);
 const pitchObj = new THREE.Object3D();
 const rig = new THREE.Object3D();
 pitchObj.add(camera); rig.add(pitchObj); scene.add(rig);
@@ -210,9 +211,9 @@ const brushA = T.brush(2, 2), brushB = T.brush(3, 1.5);
 
 // ---------- Materials ----------
 const M = {
-  inox: new THREE.MeshPhysicalMaterial({ color: 0xcdd0d3, metalness: 1, roughness: 0.46, roughnessMap: brushA, bumpMap: brushA, bumpScale: 0.0012, anisotropy: 0.7, envMapIntensity: 0.65 }),
-  inoxDoor: new THREE.MeshPhysicalMaterial({ color: 0xbfc3c7, metalness: 1, roughness: 0.42, roughnessMap: brushB, bumpMap: brushB, bumpScale: 0.0012, anisotropy: 0.8, envMapIntensity: 0.65 }),
-  inoxDark: new THREE.MeshStandardMaterial({ color: 0x7e8488, metalness: 0.9, roughness: 0.48, roughnessMap: brushB, envMapIntensity: 0.7 }),
+  inox: new THREE.MeshPhysicalMaterial({ color: 0xcdd0d3, metalness: 1, roughness: 0.46, roughnessMap: brushA, bumpMap: brushA, bumpScale: 0.0012, anisotropy: 0.7, envMapIntensity: 0.85 }),
+  inoxDoor: new THREE.MeshPhysicalMaterial({ color: 0xc9cdd0, metalness: 1, roughness: 0.42, roughnessMap: brushB, bumpMap: brushB, bumpScale: 0.0012, anisotropy: 0.8, envMapIntensity: 0.95 }),
+  inoxDark: new THREE.MeshStandardMaterial({ color: 0x7e8488, metalness: 0.9, roughness: 0.48, roughnessMap: brushB, envMapIntensity: 0.85 }),
   plate: new THREE.MeshStandardMaterial({ color: 0x50555a, metalness: 1, roughness: 0.62, roughnessMap: brushA }),
   alu: new THREE.MeshStandardMaterial({ color: 0xdadcdc, metalness: 0.7, roughness: 0.45 }),
   brass: new THREE.MeshStandardMaterial({ color: 0xb8925a, metalness: 1, roughness: 0.3 }),
@@ -235,7 +236,7 @@ const M = {
   daylight: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xe6eef5, emissiveIntensity: 1.8, roughness: 1 }),
   glassRoof: new THREE.MeshStandardMaterial({ color: 0x5f6a74, emissive: 0x9fb0c0, emissiveIntensity: 0.42, roughness: 1, side: THREE.DoubleSide }),
   crate: new THREE.MeshStandardMaterial({ color: 0x9a7b55, roughness: 0.85 }),
-  tilesFloor: new THREE.MeshStandardMaterial({ map: T.floor(5.283 / 1.2, 2.734 / 1.2), roughness: 0.55, metalness: 0.05 }),
+  tilesFloor: new THREE.MeshStandardMaterial({ map: T.floor(5.283 / 1.2, 2.734 / 1.2), roughness: 0.55, metalness: 0.05, envMapIntensity: 0.8 }),
   hallFloor: new THREE.MeshStandardMaterial({ color: 0xa8a299, roughness: 0.85 }),
   metroS: new THREE.MeshStandardMaterial({ map: T.metro(4.933 / 0.3, 1.8 / 0.15), roughnessMap: T.metroR(4.933 / 0.3, 1.8 / 0.15), bumpMap: T.metroR(4.933 / 0.3, 1.8 / 0.15), bumpScale: -0.006, roughness: 1, metalness: 0.02 }),
   metroW: new THREE.MeshStandardMaterial({ map: T.metro(2.184 / 0.3, 1.8 / 0.15), roughnessMap: T.metroR(2.184 / 0.3, 1.8 / 0.15), bumpMap: T.metroR(2.184 / 0.3, 1.8 / 0.15), bumpScale: -0.006, roughness: 1, metalness: 0.02 }),
@@ -244,6 +245,23 @@ const M = {
 };
 M.stoneE = M.stone.clone();                       // east bar top (other orientation)
 M.hood = M.inox.clone(); M.hood.envMapIntensity = 0.4; M.hood.color.set(0xb9bdc1); M.hood.roughness = 0.9; M.hood.anisotropy = 0.2;   // hood canopy: large flat panel, reads mid-grey like in the reference renders
+M.chrome = new THREE.MeshStandardMaterial({ color: 0xe6e9ec, metalness: 1, roughness: 0.14 });                                     // polished parts: knob bezels, handles, taps
+M.glassBlack = new THREE.MeshPhysicalMaterial({ color: 0x0a0c0f, metalness: 0.5, roughness: 0.06, envMapIntensity: 1.2 });          // oven door glass (opaque, mirror-dark)
+M.panel = new THREE.MeshStandardMaterial({ color: 0x25282b, metalness: 0.6, roughness: 0.5 });                                      // control panels (dark steel)
+M.oil = new THREE.MeshPhysicalMaterial({ color: 0xb07a1e, metalness: 0, roughness: 0.02, clearcoat: 1, envMapIntensity: 1.6 });                           // fryer oil
+M.pilotG = new THREE.MeshStandardMaterial({ color: 0x1a3a1a, emissive: 0x36ff4a, emissiveIntensity: 2 });
+M.pilotO = new THREE.MeshStandardMaterial({ color: 0x3a2a10, emissive: 0xffa21e, emissiveIntensity: 2 });
+const digits = (txt, col, bg = '#140000') => new THREE.MeshBasicMaterial({ map: mkTex(128, 48, (g, w, h) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.fillStyle = col; g.font = 'bold 36px "Courier New", monospace'; g.textAlign = 'center'; g.fillText(txt, w / 2, 37); }, 1, 1) });   // digital displays
+M.tempR = digits('+3.0', '#ff3a26'); M.tempF = digits('180', '#ff3a26'); M.tempB = digits('+4', '#5fb8ff', '#06101a');
+// bottles for the back-bar fridge: [body, label colour, cap colour] — water, white wine, red wine, beer, orange juice, cola
+const bottleKinds = [
+  [new THREE.MeshPhysicalMaterial({ color: 0xd6ecf7, transparent: true, opacity: 0.55, roughness: 0.08 }), 0x2f7fd6, 0x2f7fd6],
+  [new THREE.MeshPhysicalMaterial({ color: 0xbfe6c9, transparent: true, opacity: 0.7, roughness: 0.08 }), 0xf3efe2, 0x2c2c2c],
+  [new THREE.MeshPhysicalMaterial({ color: 0x2b4f22, roughness: 0.12 }), 0xe9dcc0, 0x7a1f1f],
+  [new THREE.MeshPhysicalMaterial({ color: 0x5a2f10, roughness: 0.12 }), 0xd43a2a, 0xd9b36a],
+  [new THREE.MeshStandardMaterial({ color: 0xe8862a, roughness: 0.3 }), 0xf4d35e, 0xffffff],
+  [new THREE.MeshPhysicalMaterial({ color: 0x1a0d0a, roughness: 0.1 }), 0xc8102e, 0xc8102e],
+].map(([body, lab, cap]) => ({ body, lab: new THREE.MeshStandardMaterial({ color: lab, roughness: 0.6 }), cap: new THREE.MeshStandardMaterial({ color: cap, roughness: 0.35, metalness: 0.3 }) }));
 { // real PBR maps swapped in when they arrive (repeat = surface size / real size of one tile of texture)
   const NS = s => ({ normalScale: new THREE.Vector2(s, s) }), C = c => ({ color: new THREE.Color(c) });
   const mS = [4.933 / 1.5, 1.5], mW = [2.184 / 1.5, 1.5], sN = [5.583 / 0.35, 1], sE = [1, 1.696 / 0.3], wN = [5.283, 2.1], wE = [1.5, 2.1], fH = [12.5, 12.5], fS = [5.283 / 2.4, 2.734 / 2.4];
@@ -257,13 +275,13 @@ M.hood = M.inox.clone(); M.hood.envMapIntensity = 0.4; M.hood.color.set(0xb9bdc1
   apply('wood_r.jpg', false, [[M.woodN, 'roughnessMap', ...wN, { roughness: 1.4 }], [M.woodE, 'roughnessMap', ...wE, { roughness: 1.4 }]]);
   apply('wood_n.jpg', false, [[M.woodN, 'normalMap', ...wN, NS(0.6)], [M.woodE, 'normalMap', ...wE, NS(0.6)]]);
   apply('floor_c.jpg', true, [[M.hallFloor, 'map', ...fH, C(0xaea89e)], [M.tilesFloor, 'map', ...fS, C(0x84888c)]]);
-  apply('floor_r.jpg', false, [[M.hallFloor, 'roughnessMap', ...fH, { roughness: 1.1 }], [M.tilesFloor, 'roughnessMap', ...fS, { roughness: 0.9 }]]);
+  apply('floor_r.jpg', false, [[M.hallFloor, 'roughnessMap', ...fH, { roughness: 1.1 }], [M.tilesFloor, 'roughnessMap', ...fS, { roughness: 0.7 }]]);
   apply('floor_n.jpg', false, [[M.hallFloor, 'normalMap', ...fH, NS(0.5)], [M.tilesFloor, 'normalMap', ...fS, NS(0.5)]]);
   apply('metal_c.jpg', true, [[M.inox, 'map', 2, 2, C(0xe8ebee)], [M.inoxDoor, 'map', 3, 1.5, C(0xdfe2e5)], [M.inoxDark, 'map', 2, 2, C(0x8f949a)], [M.hood, 'map', 2, 2, C(0xcfd3d7)]]);
   // stainless roughness = brushed streaks + the real scratches/smudges of the metal (added in a canvas)
   loadTex('metal_r.jpg', false, t => {
     const mk = (base, rx, ry) => mkTex(1024, 1024, (g, w, h) => { g.drawImage(base.image, 0, 0, w, h); g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.9; g.drawImage(t.image, 0, 0, w, h); }, rx, ry, true);
-    upd(M.inox, { roughnessMap: mk(brushA, 2, 2), roughness: 0.36 }); upd(M.inoxDoor, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.32 }); upd(M.inoxDark, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.5 }); upd(M.hood, { roughnessMap: mk(brushA, 2, 2), roughness: 0.9 });   // matte enough that the pendant highlights stay soft on the big panel
+    upd(M.inox, { roughnessMap: mk(brushA, 2, 2), roughness: 0.28 }); upd(M.inoxDoor, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.24 }); upd(M.inoxDark, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.4 }); upd(M.hood, { roughnessMap: mk(brushA, 2, 2), roughness: 0.9 });   // matte enough that the pendant highlights stay soft on the big panel
   });
 }
 
@@ -282,8 +300,34 @@ function Cyl(cx, cy, cz, r, h, mat, axis) {     // cylinder from its centre
   if (axis === 'x') m.rotation.z = Math.PI / 2; if (axis === 'z') m.rotation.x = Math.PI / 2;
   m.position.set(cx, cy, cz); m.castShadow = m.receiveShadow = true; scene.add(m); return m;
 }
-function legs(x0, z0, x1, z1, h, inset = 0.04) {
-  for (const [x, z] of [[x0 + inset, z0 + inset], [x1 - inset, z0 + inset], [x0 + inset, z1 - inset], [x1 - inset, z1 - inset]]) B(x - 0.02, 0, z - 0.02, 0.04, h, 0.04, M.inoxDark);
+function legs(x0, z0, x1, z1, h, inset = 0.04) {   // round adjustable stainless feet: black pad, tube, hex collar
+  for (const [x, z] of [[x0 + inset, z0 + inset], [x1 - inset, z0 + inset], [x0 + inset, z1 - inset], [x1 - inset, z1 - inset]]) { Cyl(x, 0.006, z, 0.025, 0.012, M.black); Cyl(x, h / 2 + 0.006, z, 0.016, Math.max(0.01, h - 0.012), M.inoxDoor); Cyl(x, 0.035, z, 0.021, 0.014, M.inoxDark); }
+}
+function dial(x, y, z, face = '-z', r = 0.019) {    // control knob on a front at (x,y,z): chrome bezel + black cap + white index; face = direction it sticks out
+  const ax = face === '+x' ? 'x' : 'z', dx = face === '+x' ? 1 : 0, dz = face === '-z' ? -1 : face === '+z' ? 1 : 0;
+  Cyl(x + dx * 0.004, y, z + dz * 0.004, r + 0.006, 0.008, M.chrome, ax); Cyl(x + dx * 0.016, y, z + dz * 0.016, r, 0.024, M.black, ax);
+  B(x + dx * 0.027 - 0.003, y + r * 0.35, z + dz * 0.027 - 0.003, 0.006, r * 0.55, 0.006, M.white);
+}
+function pull(x, y, z, w, face = '-z') {            // full-width recessed grip along the top of a drawer/door front: dark slot under a protruding lip
+  if (face === '+x') { B(x - 0.002, y, z, 0.006, 0.02, w, M.black); B(x - 0.002, y + 0.02, z, 0.02, 0.022, w, M.inoxDoor); }
+  else { B(x, y, z - 0.004, w, 0.02, 0.006, M.black); B(x, y + 0.02, z - 0.018, w, 0.022, 0.02, M.inoxDoor); }
+}
+function handleV(x, y, z, h, face = '-z') {         // vertical tube handle on two stand-offs (oven and fridge doors)
+  const [dx, dz] = face === '+x' ? [1, 0] : face === '+z' ? [0, 1] : [0, -1];
+  Cyl(x + dx * 0.05, y + h / 2, z + dz * 0.05, 0.011, h, M.chrome);
+  for (const yy of [y + 0.04, y + h - 0.04]) Cyl(x + dx * 0.025, yy, z + dz * 0.025, 0.008, 0.05, M.chrome, dx ? 'x' : 'z');
+}
+function display(x, y, z, w, h, mat, face = '-z') { // digital display centred at (x,y) on a front: black bezel + lit digits
+  if (face === '+x') { B(x, y - h / 2 - 0.008, z - w / 2 - 0.01, 0.004, h + 0.016, w + 0.02, M.black); B(x + 0.003, y - h / 2, z - w / 2, 0.002, h, w, mat); }
+  else { const o = face === '+z' ? 0 : -0.004; B(x - w / 2 - 0.01, y - h / 2 - 0.008, z + o, w + 0.02, h + 0.016, 0.004, M.black); B(x - w / 2, y - h / 2, z + o + (face === '+z' ? 0.004 : -0.002), w, h, 0.002, mat); }
+}
+function bottles(list) {                            // [x, y(base), z, kind] — one InstancedMesh per kind and part (bodies, labels, caps)
+  const prof = [[0, 0], [0.028, 0], [0.029, 0.01], [0.029, 0.148], [0.024, 0.165], [0.013, 0.176], [0.012, 0.2], [0.013, 0.204], [0, 0.204]].map(([r, y]) => new THREE.Vector2(r, y));
+  const gBody = new THREE.LatheGeometry(prof, 18), gLab = new THREE.CylinderGeometry(0.0298, 0.0298, 0.06, 18, 1, true), gCap = new THREE.CylinderGeometry(0.0135, 0.0135, 0.018, 12), m4 = new THREE.Matrix4();
+  bottleKinds.forEach((k, i) => {
+    const items = list.filter(b => b[3] % bottleKinds.length === i); if (!items.length) return;
+    for (const [g, mat, dy] of [[gBody, k.body, 0], [gLab, k.lab, 0.08], [gCap, k.cap, 0.195]]) { const im = new THREE.InstancedMesh(g, mat, items.length); im.castShadow = true; items.forEach((b, j) => im.setMatrixAt(j, m4.makeTranslation(b[0], b[1] + dy, b[2]))); scene.add(im); }
+  });
 }
 const labels = [];
 const L = (code, name, x, y, z, exist) => labels.push({ code, name, x, y, z, exist });
@@ -351,8 +395,9 @@ const W = 4.933, D = 2.184;                      // interior, metres
 
 // ---------- West wall: C15 refrigerated cabinet + C14 countertop fryer ----------
 {
-  B(0, 0.12, 0, 0.69, 0.78, 1.372, M.inox, true); legs(0, 0, 0.69, 1.372, 0.12);
-  for (let i = 0; i < 3; i++) { B(0.69, 0.16, 0.02 + i * 0.45, 0.012, 0.7, 0.43, M.inoxDoor); B(0.70, 0.3, 0.40 + i * 0.45, 0.015, 0.4, 0.02, M.inoxDark); }
+  B(0, 0.12, 0, 0.69, 0.78, 1.372, M.inoxDark, true); legs(0, 0, 0.69, 1.372, 0.12);   // dark body = seams around the doors
+  B(0.69, 0.86, 0.01, 0.008, 0.04, 1.352, M.panel); display(0.698, 0.88, 0.14, 0.07, 0.02, M.tempR, '+x'); Cyl(0.699, 0.88, 0.22, 0.004, 0.004, M.pilotG, 'x');
+  for (let i = 0; i < 3; i++) { B(0.69, 0.16, 0.015 + i * 0.452, 0.012, 0.69, 0.44, M.inoxDoor); handleV(0.702, 0.30, 0.42 + i * 0.452, 0.40, '+x'); }
   L('C15', 'Meuble réfrigéré 3 portes', 0.35, 1.15, 0.69);
   B(0.10, 0.9, 0.26, 0.45, 0.32, 0.30, M.inox); B(0.14, 1.17, 0.30, 0.30, 0.06, 0.22, M.black);
   B(0.55, 1.16, 0.39, 0.16, 0.02, 0.035, M.black); B(0.47, 0.95, 0.265, 0.07, 0.25, 0.012, M.black);
@@ -364,30 +409,34 @@ const W = 4.933, D = 2.184;                      // interior, metres
   // C13 combi oven on stand
   legs(0.08, 1.50, 0.63, 2.16, 0.88); B(0.08, 0.35, 1.50, 0.55, 0.02, 0.66, M.inoxDark); B(0.08, 0.88, 1.50, 0.55, 0.02, 0.66, M.inox); addObs(0.08, 1.50, 0.63, 2.16);
   B(0.08, 0.9, 1.50, 0.55, 0.65, 0.66, M.inox);
-  B(0.10, 0.95, 1.488, 0.36, 0.55, 0.014, M.glassDark); B(0.49, 0.95, 1.492, 0.12, 0.55, 0.01, M.black); B(0.51, 1.32, 1.488, 0.08, 0.12, 0.006, M.screen);
-  B(0.43, 1.0, 1.47, 0.015, 0.45, 0.015, M.inoxDark);
+  B(0.10, 0.95, 1.488, 0.36, 0.55, 0.014, M.glassBlack); B(0.49, 0.95, 1.492, 0.12, 0.55, 0.01, M.panel); B(0.51, 1.32, 1.488, 0.08, 0.12, 0.006, M.screen);
+  handleV(0.42, 1.0, 1.488, 0.45); dial(0.55, 1.14, 1.492, '-z', 0.024); Cyl(0.52, 1.05, 1.49, 0.004, 0.004, M.pilotG, 'z'); Cyl(0.58, 1.05, 1.49, 0.004, 0.004, M.pilotO, 'z');
   B(0.085, 0.935, 1.484, 0.39, 0.015, 0.012, M.inoxDark); B(0.085, 1.50, 1.484, 0.39, 0.015, 0.012, M.inoxDark); B(0.085, 0.935, 1.484, 0.015, 0.58, 0.012, M.inoxDark); B(0.46, 0.935, 1.484, 0.015, 0.58, 0.012, M.inoxDark);   // door frame
   L('C13', 'Four mixte compact', 0.355, 1.8, 1.83);
   // C10 neutral 400 + C11 induction
   B(0.70, 0.12, 1.484, 0.40, 0.78, 0.70, M.inox, true); legs(0.70, 1.484, 1.10, 2.184, 0.12);
-  B(0.705, 0.29, 1.4825, 0.39, 0.52, 0.004, M.plate); B(0.71, 0.3, 1.482, 0.38, 0.5, 0.01, M.inoxDoor); B(0.73, 0.78, 1.47, 0.34, 0.015, 0.015, M.inoxDark);   // dark reveal around the door
+  B(0.705, 0.29, 1.4825, 0.39, 0.52, 0.004, M.plate); B(0.71, 0.3, 1.482, 0.38, 0.5, 0.01, M.inoxDoor); pull(0.71, 0.755, 1.482, 0.38);   // dark reveal around the door, recessed grip
   L('C10', 'Élément neutre 400', 0.90, 1.22, 1.83);
-  B(0.72, 0.9, 1.55, 0.36, 0.055, 0.60, M.black);
+  B(0.72, 0.9, 1.55, 0.36, 0.055, 0.60, M.black); dial(0.80, 0.927, 1.55, '-z', 0.014); dial(1.0, 0.927, 1.55, '-z', 0.014); B(0.86, 0.92, 1.546, 0.08, 0.012, 0.004, M.tempR);
   for (const z of [1.72, 2.0]) { const r = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.11, 32), new THREE.MeshBasicMaterial({ color: 0x5b6066 })); r.rotation.x = -Math.PI / 2; r.position.set(0.90, 0.956, z); scene.add(r); }
   L('C11', 'Induction à poser', 0.90, 1.4, 1.83);
   // C09 refrigerated base, 6 drawers
   B(1.10, 0.15, 1.484, 1.20, 0.47, 0.70, M.inoxDark, true); legs(1.10, 1.484, 2.30, 2.184, 0.15);   // dark body = dark seams between the drawer fronts
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { B(1.11 + i * 0.40, 0.17 + j * 0.23, 1.476, 0.38, 0.21, 0.01, M.inoxDoor); B(1.17 + i * 0.40, 0.34 + j * 0.23, 1.462, 0.26, 0.015, 0.015, M.inoxDark); }
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { B(1.11 + i * 0.40, 0.17 + j * 0.23, 1.476, 0.38, 0.21, 0.01, M.inoxDoor); pull(1.11 + i * 0.40, 0.335 + j * 0.23, 1.476, 0.38); }
   L('C09', 'Soubassement réfrigéré 6 tiroirs', 1.70, 0.5, 1.46);
   // C08 plancha, C07 neutral, C06 fryer (700 series tops)
-  for (const x of [1.10, 1.50, 1.90]) B(x, 0.62, 1.484, 0.40, 0.28, 0.70, M.inox);
+  B(1.10, 0.62, 1.49, 1.20, 0.28, 0.694, M.plate);                   // dark backing = seams between the three 700-series modules
+  for (const x of [1.10, 1.50, 1.90]) { B(x + 0.003, 0.62, 1.484, 0.394, 0.28, 0.70, M.inox); Cyl(x + 0.2, 0.891, 1.493, 0.009, 0.394, M.inox, 'x'); }   // modules with a rolled front edge
   B(1.13, 0.90, 1.60, 0.34, 0.012, 0.50, M.plate); B(1.13, 0.905, 1.50, 0.34, 0.012, 0.09, M.plate);
   B(1.13, 0.91, 2.09, 0.34, 0.07, 0.015, M.inox); B(1.13, 0.91, 1.60, 0.012, 0.07, 0.50, M.inox); B(1.458, 0.91, 1.60, 0.012, 0.07, 0.50, M.inox);   // splash guards
-  B(1.10, 0.65, 1.47, 0.40, 0.10, 0.015, M.black); Cyl(1.22, 0.70, 1.465, 0.018, 0.02, M.inoxDark, 'z'); Cyl(1.30, 0.70, 1.465, 0.018, 0.02, M.inoxDark, 'z');
-  B(1.36, 0.66, 1.462, 0.11, 0.08, 0.01, M.inoxDoor);                 // grease drawer
+  B(1.103, 0.65, 1.47, 0.394, 0.10, 0.015, M.panel); dial(1.17, 0.70, 1.47); dial(1.26, 0.70, 1.47); Cyl(1.33, 0.70, 1.468, 0.005, 0.004, M.pilotO, 'z');
+  B(1.37, 0.66, 1.462, 0.11, 0.08, 0.01, M.inoxDoor); B(1.38, 0.72, 1.458, 0.09, 0.006, 0.006, M.black);   // grease drawer
   L('C08', 'Plancha 400', 1.30, 1.25, 1.83);
+  B(1.52, 0.66, 1.476, 0.36, 0.185, 0.008, M.inoxDoor); pull(1.52, 0.80, 1.476, 0.36);   // neutral element drawer
   L('C07', 'Élément neutre 400', 1.70, 1.25, 1.83);
-  B(1.93, 0.90, 1.60, 0.34, 0.012, 0.48, M.black); B(1.90, 0.65, 1.47, 0.40, 0.10, 0.015, M.black); Cyl(2.02, 0.70, 1.465, 0.018, 0.02, M.inoxDark, 'z');
+  for (const [x, z, w, d] of [[1.93, 1.60, 0.34, 0.015], [1.93, 2.065, 0.34, 0.015], [1.93, 1.60, 0.015, 0.48], [2.255, 1.60, 0.015, 0.48]]) B(x, 0.90, z, w, 0.025, d, M.inoxDark);   // fryer well rim
+  B(1.945, 0.90, 1.615, 0.31, 0.012, 0.45, M.oil);
+  B(1.903, 0.65, 1.47, 0.394, 0.10, 0.015, M.panel); display(1.99, 0.70, 1.47, 0.075, 0.028, M.tempF); dial(2.12, 0.70, 1.47); Cyl(2.20, 0.70, 1.468, 0.005, 0.004, M.pilotG, 'z'); Cyl(2.24, 0.70, 1.468, 0.005, 0.004, M.pilotO, 'z');
   for (const x of [2.0, 2.2]) { Cyl(x, 1.0, 1.50, 0.01, 0.22, M.inoxDark, 'z'); B(x - 0.05, 0.99, 1.37, 0.10, 0.02, 0.03, M.black); B(x - 0.08, 0.86, 1.63, 0.16, 0.14, 0.32, M.wire); }   // baskets
   L('C06', 'Friteuse 400', 2.10, 1.25, 1.83);
   B(1.10, 0.90, 2.15, 1.20, 0.12, 0.034, M.inox);                     // upstand
@@ -410,7 +459,8 @@ const W = 4.933, D = 2.184;                      // interior, metres
   B(0.25, 2.092, 1.215, 2.0, 0.008, 0.07, M.lamp);                     // light strip under the hood lip
   L('C21', 'Hotte', 1.25, 2.7, 1.69);
   // C05 ice machine under a worktop, C04 slicer on it, C03 tilted wall shelf
-  B(2.32, 0.10, 1.65, 0.35, 0.62, 0.53, M.inox, true); B(2.33, 0.12, 1.645, 0.33, 0.16, 0.006, M.black); B(2.335, 0.295, 1.6435, 0.32, 0.41, 0.004, M.plate); B(2.34, 0.30, 1.642, 0.31, 0.40, 0.006, M.inoxDoor);
+  B(2.32, 0.10, 1.65, 0.35, 0.62, 0.53, M.inox, true); B(2.33, 0.12, 1.645, 0.33, 0.16, 0.006, M.black); B(2.335, 0.295, 1.6435, 0.32, 0.41, 0.004, M.plate); B(2.34, 0.30, 1.642, 0.31, 0.40, 0.006, M.inoxDoor); pull(2.34, 0.655, 1.642, 0.31);
+  for (let k = 0; k < 6; k++) B(2.34, 0.13 + k * 0.025, 1.642, 0.31, 0.008, 0.004, M.inoxDoor);   // ventilation grille slats
   L('C05', 'Machine à glaçons', 2.50, 0.75, 1.65, true);
   B(2.30, 0.86, 1.584, 1.934, 0.04, 0.60, M.inox, true); B(2.30, 0, 1.60, 0.03, 0.86, 0.03, M.inoxDark); B(2.30, 0, 2.15, 0.03, 0.86, 0.03, M.inoxDark);
   B(2.30, 0.90, 2.15, 1.934, 0.10, 0.034, M.inox);
@@ -426,17 +476,20 @@ const W = 4.933, D = 2.184;                      // interior, metres
   L('C03', 'Étagère murale inclinée', 2.60, 1.75, 1.95);
   // C01 back-bar fridge, 3 glass doors, bottles; C02 coffee machine on top
   B(2.888, 0.10, 1.60, 1.346, 0.76, 0.56, M.black, true); B(2.90, 0.14, 1.62, 1.32, 0.68, 0.50, M.fridgeIn); legs(2.888, 1.60, 4.234, 2.16, 0.10, 0.03);
+  const bl = [];
   for (let d = 0; d < 3; d++) {
     const x0 = 2.90 + d * 0.4487;
-    B(x0 + 0.02, 0.14, 1.594, 0.41, 0.68, 0.008, M.glass); B(x0 + 0.03, 0.42, 1.585, 0.02, 0.18, 0.012, M.inoxDark); B(x0 + 0.03, 0.80, 1.63, 0.39, 0.006, 0.02, M.lamp);
+    B(x0 + 0.02, 0.14, 1.594, 0.41, 0.68, 0.008, M.glass); handleV(x0 + 0.05, 0.30, 1.594, 0.30); B(x0 + 0.03, 0.80, 1.63, 0.39, 0.006, 0.02, M.lamp);
     for (let s = 0; s < 3; s++) { B(x0 + 0.02, 0.16 + s * 0.22, 1.63, 0.41, 0.008, 0.44, M.inoxDark);
-      for (let b = 0; b < 5; b++) Cyl(x0 + 0.06 + b * 0.083, 0.27 + s * 0.22, 1.72, 0.028, 0.2, M.bottle); }
+      for (let b = 0; b < 6; b++) for (let r = 0; r < 2; r++) bl.push([x0 + 0.055 + b * 0.067, 0.168 + s * 0.22, 1.69 + r * 0.075, d * 2 + s * 3 + r]); }
   }
+  bottles(bl); display(2.98, 0.12, 1.594, 0.05, 0.016, M.tempB);   // 108 bottles of 6 kinds (instanced), blue temperature display
   for (let d = 0; d <= 3; d++) B(2.888 + d * 0.4487 - 0.01, 0.10, 1.59, 0.02, 0.76, 0.02, M.black);
   L('C01', 'Arrière-bar réfrigéré 3 portes', 3.56, 0.70, 1.56, true);
   B(3.05, 0.90, 1.70, 0.90, 0.46, 0.45, M.inox); B(3.05, 1.36, 1.70, 0.90, 0.02, 0.45, M.inoxDark);
   B(3.06, 1.14, 1.696, 0.88, 0.12, 0.006, M.black); B(3.05, 0.90, 1.63, 0.90, 0.03, 0.08, M.inoxDark);
-  for (let i = 0; i < 3; i++) { B(3.14 + i * 0.30, 1.0, 1.66, 0.11, 0.10, 0.05, M.inoxDark); B(3.17 + i * 0.30, 0.96, 1.64, 0.015, 0.05, 0.015, M.black); }
+  for (let i = 0; i < 3; i++) { B(3.14 + i * 0.30, 1.0, 1.66, 0.11, 0.10, 0.05, M.chrome); const pf = Cyl(3.195 + i * 0.30, 0.975, 1.60, 0.013, 0.12, M.black, 'z'); pf.rotation.x = Math.PI / 2 - 0.45; Cyl(3.195 + i * 0.30, 1.0, 1.655, 0.03, 0.012, M.chrome, 'z'); }   // group heads with portafilters
+  Cyl(3.50, 1.385, 1.705, 0.007, 0.88, M.chrome, 'x');
   for (let i = 0; i < 8; i++) Cyl(3.12 + (i % 4) * 0.22, 1.41, 1.80 + Math.floor(i / 4) * 0.2, 0.035, 0.06, M.white);
   Cyl(3.98, 1.05, 1.68, 0.008, 0.25, M.inoxDark, 'z'); Cyl(3.08, 1.05, 1.68, 0.008, 0.25, M.inoxDark, 'z');
   B(3.07, 0.905, 1.635, 0.86, 0.01, 0.08, M.plate);                   // drip-tray grille
@@ -451,8 +504,8 @@ const W = 4.933, D = 2.184;                      // interior, metres
   B(1.56, 0.45, 0.613, 0.03, 0.10, 0.004, M.black); B(1.72, 0.45, 0.598, 0.03, 0.10, 0.004, M.black);
   L('C16', 'Meuble portes coulissantes', 1.70, 1.15, 0.30);
   // C17 dishwasher under the sink table drainboard
-  B(2.20, 0.10, 0.02, 0.60, 0.74, 0.58, M.inox, true); B(2.21, 0.12, 0.60, 0.58, 0.60, 0.012, M.inoxDoor); B(2.21, 0.74, 0.60, 0.58, 0.09, 0.012, M.black);
-  B(2.26, 0.68, 0.612, 0.48, 0.02, 0.02, M.inoxDark); B(2.30, 0.77, 0.613, 0.02, 0.02, 0.004, M.screen); Cyl(2.42, 0.785, 0.614, 0.009, 0.006, M.white, 'z'); Cyl(2.46, 0.785, 0.614, 0.009, 0.006, M.white, 'z');
+  B(2.20, 0.10, 0.02, 0.60, 0.74, 0.58, M.inox, true); B(2.21, 0.12, 0.60, 0.58, 0.60, 0.012, M.inoxDoor); B(2.21, 0.74, 0.60, 0.58, 0.09, 0.012, M.panel);
+  B(2.26, 0.68, 0.612, 0.48, 0.02, 0.02, M.chrome); display(2.33, 0.785, 0.612, 0.06, 0.022, M.tempR, '+z'); Cyl(2.46, 0.785, 0.614, 0.009, 0.006, M.white, 'z'); Cyl(2.50, 0.785, 0.614, 0.009, 0.006, M.pilotG, 'z');
   L('C17', 'Lave-vaisselle', 2.50, 1.1, 0.30);
   // C18 sink table: top with a bowl hole, bowl, tap, backsplash, legs
   const s = new THREE.Shape(); s.moveTo(0, 0); s.lineTo(1.2, 0); s.lineTo(1.2, 0.6); s.lineTo(0, 0.6); s.closePath();
@@ -460,14 +513,14 @@ const W = 4.933, D = 2.184;                      // interior, metres
   const top = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.04, bevelEnabled: false }), M.inox);
   top.rotation.x = -Math.PI / 2; top.position.set(2.20, 0.86, 0.60); top.castShadow = top.receiveShadow = true; scene.add(top); addObs(2.20, 0, 3.40, 0.60);
   B(2.92, 0.62, 0.08, 0.40, 0.01, 0.42, M.inoxDark); B(2.92, 0.62, 0.08, 0.01, 0.24, 0.42, M.inoxDark); B(3.31, 0.62, 0.08, 0.01, 0.24, 0.42, M.inoxDark); B(2.92, 0.62, 0.08, 0.40, 0.24, 0.01, M.inoxDark); B(2.92, 0.62, 0.49, 0.40, 0.24, 0.01, M.inoxDark);
-  Cyl(3.12, 1.02, 0.05, 0.012, 0.24, M.inoxDark); B(3.11, 1.13, 0.05, 0.02, 0.02, 0.20, M.inoxDark); B(3.10, 1.08, 0.235, 0.04, 0.05, 0.02, M.inoxDark);
+  Cyl(3.12, 1.02, 0.05, 0.012, 0.24, M.chrome); B(3.11, 1.13, 0.05, 0.02, 0.02, 0.20, M.chrome); B(3.10, 1.08, 0.235, 0.04, 0.05, 0.02, M.chrome);
   B(2.20, 0.90, 0, 1.20, 0.10, 0.03, M.inox);
   for (let i = 0; i < 5; i++) B(2.30 + i * 0.09, 0.9005, 0.12, 0.02, 0.003, 0.36, M.plate);
   B(3.36, 0, 0.04, 0.03, 0.86, 0.03, M.inoxDark); B(3.36, 0, 0.55, 0.03, 0.86, 0.03, M.inoxDark);
   L('C18', 'Table plonge 1 bac', 3.10, 1.15, 0.30);
   // existing counter at the east end, glasswasher under it, keg, beer font on top
   B(3.40, 0.86, 0, 1.533, 0.04, 0.60, M.laminate, true); for (const [x, z] of [[3.42, 0.04], [3.42, 0.55], [4.90, 0.04], [4.90, 0.55]]) B(x, 0, z, 0.03, 0.86, 0.03, M.inoxDark);
-  B(3.46, 0, 0.09, 0.42, 0.70, 0.51, M.inox); B(3.47, 0.02, 0.60, 0.40, 0.56, 0.012, M.inoxDoor); B(3.47, 0.60, 0.60, 0.40, 0.09, 0.012, M.black); B(3.52, 0.55, 0.612, 0.30, 0.02, 0.02, M.inoxDark);
+  B(3.46, 0, 0.09, 0.42, 0.70, 0.51, M.inox); B(3.47, 0.02, 0.60, 0.40, 0.56, 0.012, M.inoxDoor); B(3.47, 0.60, 0.60, 0.40, 0.09, 0.012, M.panel); B(3.52, 0.55, 0.612, 0.30, 0.02, 0.02, M.chrome); display(3.56, 0.645, 0.612, 0.05, 0.02, M.tempR, '+z');
   L('C19', 'Lave-verres', 3.67, 0.85, 0.30, true);
   Cyl(4.45, 0.25, 0.32, 0.20, 0.50, M.inoxDark); Cyl(4.45, 0.08, 0.32, 0.205, 0.03, M.black); Cyl(4.45, 0.42, 0.32, 0.205, 0.03, M.black);
   B(4.31, 0.90, 0.13, 0.51, 0.03, 0.39, M.inoxDark); B(4.33, 0.93, 0.26, 0.47, 0.005, 0.24, M.plate);
@@ -607,21 +660,25 @@ $('b-labels').addEventListener('click', e => { labelGroup.visible = !labelGroup.
 let peopleOn = true;
 $('b-people').addEventListener('click', e => { peopleOn = !peopleOn; e.currentTarget.classList.toggle('on', peopleOn); });
 // "Rendu réel": ambient occlusion + finer shadows + full pixel ratio (heavier; optional)
-let real = false, composer = null;
+let real = false, composer = null, photoPass = null;
 $('b-real').addEventListener('click', e => {
   real = !real; e.currentTarget.classList.toggle('on', real);
   renderer.setPixelRatio(Math.min(devicePixelRatio, real ? 2 : (isTouch ? 1.5 : 2)));
   if (real && !composer) {
-    composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera));
+    composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 })); composer.addPass(new RenderPass(scene, camera));   // MSAA ×4 keeps the edges clean through the passes
     const ao = new GTAOPass(scene, camera, innerWidth, innerHeight); ao.output = GTAOPass.OUTPUT.Default; ao.blendIntensity = 0.85;
     ao.updateGtaoMaterial({ radius: 0.22, distanceExponent: 1, thickness: 1, scale: 1.1, samples: isTouch ? 8 : 16, distanceFallOff: 1, screenSpaceRadius: false });
     ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, radiusExponent: 1, rings: 2, samples: isTouch ? 8 : 16 });
     composer.addPass(ao); composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.12, 0.2, 1.3)); composer.addPass(new OutputPass());
+    photoPass = new ShaderPass({ uniforms: { tDiffuse: { value: null }, t: { value: 0 } }, vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform sampler2D tDiffuse; uniform float t; varying vec2 vUv; float hash(vec2 p) { return fract(sin(dot(mod(p, 512.0), vec2(12.9898, 78.233)) + t) * 43758.5453); } void main() { vec4 c = texture2D(tDiffuse, vUv); vec2 d = vUv - 0.5; float v = 1.0 - dot(d, d) * 0.45; float n = (hash(gl_FragCoord.xy) - 0.5) * 0.028; gl_FragColor = vec4(c.rgb * v + n, c.a); }' });
+    composer.addPass(photoPass);                                        // photo finish after tone mapping: soft vignette + fine grain
     if (!isTouch) { sun.shadow.mapSize.set(4096, 4096); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
   }
   canvas.width = 0;                                                   // forces resize() to resync renderer + composer
   if (real && isTouch) toast('Rendu réel activé : plus lent sur téléphone.');
 });
+if (!isTouch) $('b-real').click();                                    // on computers the photo finish (AO, MSAA, grain) is on by default
 $('b-legend').addEventListener('click', e => { $('legend').hidden = !$('legend').hidden; e.currentTarget.classList.toggle('on', !$('legend').hidden); });
 $('b-help').addEventListener('click', () => { $('help').hidden = false; });
 $('b-start').addEventListener('click', () => { $('help').hidden = true; });
@@ -688,7 +745,7 @@ const clock = new THREE.Clock(); const vdir = new THREE.Vector3();
 function resize() { const w = innerWidth, h = innerHeight; if (canvas.width !== Math.floor(w * renderer.getPixelRatio()) || canvas.height !== Math.floor(h * renderer.getPixelRatio())) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); if (composer) { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); } } }
 addEventListener('resize', resize);
 function tick() {
-  resize();
+  resize(); if (photoPass) photoPass.uniforms.t.value = (performance.now() % 997) * 0.01;
   const dt = Math.min(clock.getDelta(), 0.05);
   const xr = renderer.xr.isPresenting;
   let f = 0, s = 0;
@@ -725,6 +782,7 @@ function tick() {
 }
 setView('chef'); resize();
 renderer.setAnimationLoop(tick);
-window.DBG = { scene, renderer, camera, M, THREE };   // console access for tuning
+window.DBG = { scene, renderer, camera, M, THREE, look: (x, z, tx, tz, p = -0.1) => { planMode = false; pos.set(x, EYE, z); yaw = lookYaw(x, z, tx, tz); pitch = p; } };   // console access for tuning: DBG.look(x, z, targetX, targetZ)
 </script>
+
 </body></html>
