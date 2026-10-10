@@ -1,12 +1,4 @@
-<!doctype html>
-<html lang="fr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="robots" content="noindex,nofollow">
-<meta name="theme-color" content="#0f161c">
-</head>
-<body>
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#0f161c"></head><body>
 <meta charset="utf-8">
 <title>Stand Halles de Biarritz</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&display=swap">
@@ -114,6 +106,10 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -133,6 +129,20 @@ scene.background = new THREE.Color(0xe7e3db);
 scene.fog = new THREE.Fog(0xe7e3db, 12, 40);
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+// ---------- Real assets (optional, loaded in the background; the scene stays procedural if they are missing) ----------
+// textures: ambientCG (CC0) · HDRI: Poly Haven "Leadenhall Market" (CC0) · avatars: Microsoft Rocketbox (MIT)
+const mgr = new THREE.LoadingManager();
+mgr.onProgress = (url, n, total) => toast(`Textures réelles et personnages : ${Math.round(100 * n / total)} %`);
+mgr.onLoad = () => { toast('Textures réelles et personnages chargés.'); captureEnv(); };
+const texLoader = new THREE.TextureLoader(mgr);
+const upd = (m, props) => { Object.assign(m, props); m.needsUpdate = true; };
+function loadTex(file, srgb, cb) {
+  texLoader.load('assets/tex/' + file, t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; cb(t); });
+}
+// one file → several materials, each with its own repeat (clones share the GPU image)
+const apply = (file, srgb, list) => loadTex(file, srgb, t => list.forEach(([m, key, rx, ry, extra]) => { const u = t.clone(); u.repeat.set(rx, ry); upd(m, { [key]: u, ...extra }); }));
+new RGBELoader(mgr).load('assets/hdr/hall.hdr', t => { t.mapping = THREE.EquirectangularReflectionMapping; scene.background = t; scene.backgroundBlurriness = 0.4; scene.backgroundIntensity = 0.8; });
 
 const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 120);
 const pitchObj = new THREE.Object3D();
@@ -197,8 +207,8 @@ const brushA = T.brush(2, 2), brushB = T.brush(3, 1.5);
 
 // ---------- Materials ----------
 const M = {
-  inox: new THREE.MeshPhysicalMaterial({ color: 0xd2d5d8, metalness: 1, roughness: 0.58, roughnessMap: brushA, bumpMap: brushA, bumpScale: 0.0012, anisotropy: 0.7, envMapIntensity: 1 }),
-  inoxDoor: new THREE.MeshPhysicalMaterial({ color: 0xc4c8cc, metalness: 1, roughness: 0.5, roughnessMap: brushB, bumpMap: brushB, bumpScale: 0.0012, anisotropy: 0.8, envMapIntensity: 1 }),
+  inox: new THREE.MeshPhysicalMaterial({ color: 0xd2d5d8, metalness: 1, roughness: 0.46, roughnessMap: brushA, bumpMap: brushA, bumpScale: 0.0012, anisotropy: 0.7, envMapIntensity: 1.15 }),
+  inoxDoor: new THREE.MeshPhysicalMaterial({ color: 0xc4c8cc, metalness: 1, roughness: 0.42, roughnessMap: brushB, bumpMap: brushB, bumpScale: 0.0012, anisotropy: 0.8, envMapIntensity: 1.15 }),
   inoxDark: new THREE.MeshStandardMaterial({ color: 0x8f959a, metalness: 0.9, roughness: 0.48, roughnessMap: brushB }),
   plate: new THREE.MeshStandardMaterial({ color: 0x50555a, metalness: 1, roughness: 0.62, roughnessMap: brushA }),
   alu: new THREE.MeshStandardMaterial({ color: 0xdadcdc, metalness: 0.7, roughness: 0.45 }),
@@ -226,12 +236,37 @@ const M = {
   woodN: new THREE.MeshStandardMaterial({ map: T.wood(5.283, 1.05), roughness: 0.55 }),
   woodE: new THREE.MeshStandardMaterial({ map: T.wood(1.5, 1.05), roughness: 0.55 }),
 };
+M.stoneE = M.stone.clone();                       // east bar top (other orientation)
+{ // real PBR maps swapped in when they arrive (repeat = surface size / real size of one tile of texture)
+  const NS = s => ({ normalScale: new THREE.Vector2(s, s) }), C = c => ({ color: new THREE.Color(c) });
+  const mS = [4.933 / 1.5, 1.5], mW = [2.184 / 1.5, 1.5], sN = [5.583 / 0.35, 1], sE = [1, 1.696 / 0.3], wN = [5.283, 2.1], wE = [1.5, 2.1], fH = [12.5, 12.5], fS = [5.283 / 2.4, 2.734 / 2.4];
+  apply('metro_c.jpg', true, [[M.metroS, 'map', ...mS], [M.metroW, 'map', ...mW]]);
+  apply('metro_r.jpg', false, [[M.metroS, 'roughnessMap', ...mS, { roughness: 1 }], [M.metroW, 'roughnessMap', ...mW, { roughness: 1 }]]);
+  apply('metro_n.jpg', false, [[M.metroS, 'normalMap', ...mS, { bumpMap: null, ...NS(0.7) }], [M.metroW, 'normalMap', ...mW, { bumpMap: null, ...NS(0.7) }]]);
+  apply('granite_c.jpg', true, [[M.stone, 'map', ...sN, C(0xd2cec9)], [M.stoneE, 'map', ...sE, C(0xd2cec9)]]);
+  apply('granite_r.jpg', false, [[M.stone, 'roughnessMap', ...sN, { roughness: 2.6 }], [M.stoneE, 'roughnessMap', ...sE, { roughness: 2.6 }]]);
+  apply('granite_n.jpg', false, [[M.stone, 'normalMap', ...sN, NS(0.35)], [M.stoneE, 'normalMap', ...sE, NS(0.35)]]);
+  apply('wood_c.jpg', true, [[M.woodN, 'map', ...wN], [M.woodE, 'map', ...wE]]);
+  apply('wood_r.jpg', false, [[M.woodN, 'roughnessMap', ...wN, { roughness: 1.4 }], [M.woodE, 'roughnessMap', ...wE, { roughness: 1.4 }]]);
+  apply('wood_n.jpg', false, [[M.woodN, 'normalMap', ...wN, NS(0.6)], [M.woodE, 'normalMap', ...wE, NS(0.6)]]);
+  apply('floor_c.jpg', true, [[M.hallFloor, 'map', ...fH, C(0xd6d0c6)], [M.tilesFloor, 'map', ...fS, C(0xa6aaad)]]);
+  apply('floor_r.jpg', false, [[M.hallFloor, 'roughnessMap', ...fH, { roughness: 1.2 }], [M.tilesFloor, 'roughnessMap', ...fS, { roughness: 1.1 }]]);
+  apply('floor_n.jpg', false, [[M.hallFloor, 'normalMap', ...fH, NS(0.5)], [M.tilesFloor, 'normalMap', ...fS, NS(0.5)]]);
+  apply('metal_c.jpg', true, [[M.inox, 'map', 2, 2, C(0xf0f2f4)], [M.inoxDoor, 'map', 3, 1.5, C(0xe4e7ea)], [M.inoxDark, 'map', 2, 2, C(0xa4a9ad)]]);
+  // stainless roughness = brushed streaks + the real scratches/smudges of the metal (added in a canvas)
+  loadTex('metal_r.jpg', false, t => {
+    const mk = (base, rx, ry) => mkTex(1024, 1024, (g, w, h) => { g.drawImage(base.image, 0, 0, w, h); g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.9; g.drawImage(t.image, 0, 0, w, h); }, rx, ry, true);
+    upd(M.inox, { roughnessMap: mk(brushA, 2, 2), roughness: 0.36 }); upd(M.inoxDoor, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.32 }); upd(M.inoxDark, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.5 });
+  });
+}
 
 // ---------- Builders ----------
 const obstacles = [];
 const addObs = (x0, z0, x1, z1) => obstacles.push({ x0, z0, x1, z1 });
+const ROUNDED = new Set([M.inox, M.inoxDoor, M.inoxDark, M.plate, M.alu]);   // sheet-metal boxes get a small bevel (catches the light)
 function B(x, y, z, w, h, d, mat, obs) {        // box from its min corner
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  const r = ROUNDED.has(mat) ? Math.min(0.007, w / 4, h / 4, d / 4) : 0;
+  const m = new THREE.Mesh(r > 0 ? new RoundedBoxGeometry(w, h, d, 2, r) : new THREE.BoxGeometry(w, h, d), mat);
   m.position.set(x + w / 2, y + h / 2, z + d / 2); m.castShadow = m.receiveShadow = true; scene.add(m);
   if (obs) addObs(x, z, x + w, z + d); return m;
 }
@@ -252,6 +287,11 @@ const L = (code, name, x, y, z, exist) => labels.push({ code, name, x, y, z, exi
   const roof = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), M.roof); roof.rotation.x = Math.PI / 2; roof.position.set(2.4, 6.8, 1); roof.userData.ceiling = true; scene.add(roof);
   for (const [x, z] of [[-3.5, -3.2], [2.4, -3.2], [8.3, -3.2], [8.6, 2.5], [8.6, 8], [-3.5, 8], [2.4, 8]]) B(x - 0.18, 0, z - 0.18, 0.36, 6.8, 0.36, M.hall);
   for (let i = -2; i < 4; i++) B(-12, 6.2, -4 + i * 5, 36, 0.4, 0.3, M.hall).userData.ceiling = true;   // roof beams
+  const lum = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff1d6, emissiveIntensity: 3.2, roughness: 0.5 });   // hall luminaires (seen in the stainless reflections)
+  for (let x = -14; x <= 18; x += 8) for (const z of [-7, 9]) {
+    const disc = Cyl(x, 5.25, z, 0.34, 0.08, lum); disc.castShadow = false; disc.userData.ceiling = true;
+    const rod = B(x - 0.015, 5.29, z - 0.015, 0.03, 1.5, 0.03, M.black); rod.castShadow = false; rod.userData.ceiling = true;
+  }
 }
 
 // ---------- Stand shell ----------
@@ -266,7 +306,7 @@ const W = 4.933, D = 2.184;                      // interior, metres
   B(-0.2, 0, -0.15, 5.283, 1.05, 0.15, M.woodN, true);
   B(W, 0, -0.15, 0.15, 1.05, 1.496, M.woodE, true);
   B(-0.35, 1.05, -0.35, 5.583, 0.04, 0.35, M.stone, true);
-  B(W, 1.05, -0.35, 0.3, 0.04, 1.696, M.stone, true);
+  B(W, 1.05, -0.35, 0.3, 0.04, 1.696, M.stoneE, true);
   B(-0.35, 0, -0.35, 5.583, 0.02, 0.2, M.stone);                      // bar foot rail line (customer side)
 }
 
@@ -415,13 +455,15 @@ sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02; sun.target.position.set
 for (const x of [0.55, 1.25, 1.95]) { const p = new THREE.PointLight(0xfff0d8, 1.3, 4.5, 2); p.position.set(x, 2.06, 1.32); scene.add(p); }
 { const p = new THREE.PointLight(0xfff4e6, 0.8, 7, 2); p.position.set(3.6, 2.5, 0.4); scene.add(p); }
 
-// ---------- Reflections: capture the real stand once (tiles, hood, hall) and use it as the environment ----------
-{
-  const rt = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
+// ---------- Reflections: capture the real stand (tiles, hood, hall, people) and use it as the environment; redone once the real assets are in ----------
+function captureEnv() {
+  if (renderer.xr.isPresenting) return;
+  const rt = new THREE.WebGLCubeRenderTarget(512, { type: THREE.HalfFloatType });
   const cc = new THREE.CubeCamera(0.1, 60, rt); cc.position.set(2.45, 1.35, 0.95); scene.add(cc);
   cc.update(renderer, scene); scene.remove(cc);
-  scene.environment = pmrem.fromCubemap(rt.texture).texture;
+  const old = scene.environment; scene.environment = pmrem.fromCubemap(rt.texture).texture; rt.dispose(); if (old) old.dispose();
 }
+captureEnv();
 
 // ---------- People (optional): two chefs inside, clients at the bar ----------
 const people = [];
@@ -431,7 +473,7 @@ const CL = { white: cloth(0xf2f2ee), black: cloth(0x202226), navy: cloth(0x2a3a5
 const sph = (r, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), mat); m.position.set(x, y, z); m.castShadow = true; return m; };
 const cap = (r, len, mat, x, y, z, rx = 0, rz = 0) => { const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 14), mat); m.position.set(x, y, z); m.rotation.set(rx, 0, rz); m.castShadow = true; return m; };
 function person({ x, z, rot = 0, chef = false, seated = false, top = CL.navy, pants = CL.black, hair = CL.hairD, h = 1.76 }) {
-  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot; g.scale.setScalar(h / 1.76); scene.add(g); people.push(g);
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot; g.scale.setScalar(h / 1.76); scene.add(g); people.push(g); g.userData = { x, z, rot, seated, h };
   const a = m => g.add(m);
   if (seated) {                                   // on a stool (seat 0.76 m), facing the bar (+z)
     for (const sx of [-0.1, 0.1]) { a(cap(0.08, 0.30, pants, sx, 0.80, 0.15, Math.PI / 2)); a(cap(0.065, 0.32, pants, sx, 0.53, 0.30)); a(cap(0.05, 0.10, CL.shoe, sx, 0.29, 0.35, Math.PI / 2)); }
@@ -454,6 +496,32 @@ person({ x: 3.6, z: 1.0, rot: Math.PI, chef: true, top: CL.white, pants: CL.blac
 person({ x: 0.9, z: -0.62, seated: true, top: CL.rust, pants: CL.denim, hair: CL.hairL, h: 1.66 });     // clients at the bar
 person({ x: 4.1, z: -0.62, seated: true, top: CL.olive, pants: CL.black, h: 1.78 });
 person({ x: 5.75, z: 0.45, rot: -Math.PI / 2, top: CL.navy, pants: CL.denim, h: 1.74 });                // standing client, east bar
+
+// Realistic avatars (Microsoft Rocketbox, MIT licence) replace the simple figures as soon as they are loaded
+const mixers = [], SEAT_HIP = 0.835;                        // pelvis height on the stools (seat at 0.735 m)
+function addToque(o, rot) {
+  const head = o.getObjectByName('Bip01_Head'); if (!head) return;
+  const top = new THREE.Box3().setFromObject(o, true).max.y, hp = head.getWorldPosition(new THREE.Vector3());
+  const tq = new THREE.Group();
+  const c = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.092, 0.2, 20), CL.white); c.position.y = 0.1; c.castShadow = true; tq.add(c);
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.012, 8, 24), CL.white); band.rotation.x = Math.PI / 2; band.position.y = 0.012; tq.add(band);
+  tq.position.set(hp.x + 0.035 * Math.sin(rot), top - 0.035, hp.z + 0.035 * Math.cos(rot)); tq.rotation.y = rot;
+  scene.add(tq); head.attach(tq);                           // keeps the world placement, then follows the head
+}
+const gltfLoader = new GLTFLoader(mgr);
+[['chef_f', 0, true], ['chef_m', 1, true], ['client_f_sit', 2], ['client_m_sit', 3], ['client_m', 4]].forEach(([file, idx, toque]) => gltfLoader.load(`assets/people/${file}.glb`, gltf => {
+  const old = people[idx], u = old.userData, o = gltf.scene;
+  o.traverse(n => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; } });
+  const box = new THREE.Box3().setFromObject(o), s = u.h / (box.max.y - box.min.y);
+  o.scale.setScalar(s); o.position.y = -box.min.y * s;
+  const rot = u.seated ? (u.x < 2.5 ? 0.75 : -0.75) : u.rot;   // seated clients turn a little towards each other (legs clear of the bar front)
+  const g = new THREE.Group(); g.add(o); g.position.set(u.x, 0, u.z); g.rotation.y = rot; scene.add(g);
+  if (gltf.animations[0]) { const mx = new THREE.AnimationMixer(o); const act = mx.clipAction(gltf.animations[0]); act.play(); act.time = Math.random() * gltf.animations[0].duration; mx.update(0); mixers.push(mx); }
+  g.updateMatrixWorld(true);
+  if (u.seated) { const hip = o.getObjectByName('Bip01'); if (hip) { const p = hip.getWorldPosition(new THREE.Vector3()); g.position.x += u.x - p.x; g.position.z += u.z - 0.08 - p.z; g.position.y += SEAT_HIP - p.y; g.updateMatrixWorld(true); } }
+  if (toque) addToque(o, rot);
+  scene.remove(old); people[idx] = g; g.visible = old.visible;
+}));
 
 // ---------- Labels (sprites) ----------
 const labelGroup = new THREE.Group(); labelGroup.visible = false; scene.add(labelGroup);
@@ -502,7 +570,7 @@ $('b-real').addEventListener('click', e => {
     const ao = new GTAOPass(scene, camera, innerWidth, innerHeight); ao.output = GTAOPass.OUTPUT.Default; ao.blendIntensity = 0.85;
     ao.updateGtaoMaterial({ radius: 0.22, distanceExponent: 1, thickness: 1, scale: 1.1, samples: isTouch ? 8 : 16, distanceFallOff: 1, screenSpaceRadius: false });
     ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, radiusExponent: 1, rings: 2, samples: isTouch ? 8 : 16 });
-    composer.addPass(ao); composer.addPass(new OutputPass());
+    composer.addPass(ao); composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.12, 0.2, 1.3)); composer.addPass(new OutputPass());
     if (!isTouch) { sun.shadow.mapSize.set(4096, 4096); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
   }
   canvas.width = 0;                                                   // forces resize() to resync renderer + composer
@@ -605,11 +673,11 @@ function tick() {
   } else {
     rig.rotation.y = yaw; pitchObj.rotation.x = xr ? 0 : pitch;
   }
+  for (const m of mixers) m.update(dt);
   for (const p of people) p.visible = peopleOn && (planMode || Math.hypot(p.position.x - pos.x, p.position.z - pos.z) > 0.95);   // hide the figure you "are"
   if (real && composer && !xr) composer.render(); else renderer.render(scene, camera);
 }
 setView('chef'); resize();
 renderer.setAnimationLoop(tick);
 </script>
-</body>
-</html>
+</body></html>
