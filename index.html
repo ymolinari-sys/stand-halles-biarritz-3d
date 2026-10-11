@@ -729,7 +729,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 canvas.addEventListener('pointerdown', e => { if (lookId !== null) return; lookId = e.pointerId; lookTouch = e.pointerType === 'touch'; lx = e.clientX; ly = e.clientY; canvas.setPointerCapture(e.pointerId); });
 canvas.addEventListener('pointermove', e => {
   if (e.pointerId !== lookId) return; const dx = e.clientX - lx, dy = e.clientY - ly; lx = e.clientX; ly = e.clientY;
-  const k = lookTouch ? 0.0048 : 0.0035, sgn = lookTouch ? 1 : -1;
+  const k = lookTouch ? 0.0048 : 0.0035, sgn = 1;   // V8.2 : souris, trackpad et doigt « tirent le monde » : glisser vers la gauche = tourner à droite, vers le bas = regarder en haut (demande Yannick 11/10/2026)
   if (gyro) alphaOffset += sgn * dx * k; else yaw += sgn * dx * k;
   if (!gyro && !planMode) pitch = clamp(pitch + sgn * dy * k, -1.45, 1.45);
 });
