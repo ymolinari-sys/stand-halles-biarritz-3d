@@ -66,6 +66,7 @@ button.primary{font:700 14px var(--font);background:var(--accent);color:var(--ac
     <button class="chip" data-view="plan" id="b-plan">Plan</button>
     <button class="chip" id="b-labels">Repères</button>
     <button class="chip on" id="b-people">Personnes</button>
+    <button class="chip on" id="b-son">Son</button>
     <button class="chip" id="b-usdz" hidden>AR iPhone</button>
     <button class="chip" id="b-install" hidden>Installer</button>
     <a id="ar-link" rel="ar" hidden><img alt="Voir en réalité augmentée" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='118' height='30'%3E%3Crect width='118' height='30' rx='15' fill='%23c8102e'/%3E%3Ctext x='59' y='20' font-family='system-ui,sans-serif' font-size='13' font-weight='600' fill='white' text-anchor='middle'%3EVoir en AR%3C/text%3E%3C/svg%3E"></a>
@@ -419,61 +420,65 @@ const W = 4.933, D = 2.184;                      // interior, metres
 
 // ---------- West wall: C15 refrigerated cabinet + C14 countertop fryer ----------
 {
-  // Refrigerated counter 1372 x 690, worktop at 900 (V8.1): satin body on 150 mm feet, black gasket plate behind three flush doors (12 mm reveals),
-  // recessed grip along the top of each door, controller on the top rail, 40 mm worktop with a 30 mm front overhang and a 100 mm rear upstand
-  const Lc = 1.372, Dc = 0.69, dw = (Lc - 0.04 - 0.024) / 3;           // 3 doors of 0.436 m
-  legs(0, 0, Dc, Lc, 0.15);
-  B(0, 0.15, 0, Dc - 0.02, 0.71, Lc, M.inox, true);                                  // carcass 0.15 → 0.86
-  B(Dc - 0.02, 0.16, 0.012, 0.012, 0.70, Lc - 0.024, M.black);                       // gaskets / shadow behind the doors
-  for (let i = 0; i < 3; i++) { const z = 0.02 + i * (dw + 0.012); B(Dc - 0.008, 0.17, z, 0.018, 0.63, dw, M.inoxDoor); pull(Dc + 0.008, 0.78, z, dw, '+x'); }
-  B(Dc - 0.008, 0.826, 0.06, 0.006, 0.03, 0.16, M.panel); display(Dc, 0.841, 0.11, 0.07, 0.018, M.tempR, '+x'); Cyl(Dc + 0.001, 0.841, 0.19, 0.004, 0.004, M.pilotG, 'x');
-  B(0, 0.86, 0, Dc + 0.03, 0.04, Lc, M.inox);                                        // worktop
-  B(0, 0.90, 0, 0.02, 0.10, Lc, M.inox);                                              // rear upstand against the wall
-  L('C15', 'Meuble réfrigéré 3 portes', 0.35, 1.15, 0.69);
-  B(0.10, 0.9, 0.26, 0.45, 0.32, 0.30, M.inox); B(0.14, 1.17, 0.30, 0.30, 0.06, 0.22, M.black);
-  B(0.55, 1.16, 0.39, 0.16, 0.02, 0.035, M.black); B(0.47, 0.95, 0.265, 0.07, 0.25, 0.012, M.black);
+  // V8.5 : C15 = INOMAK 523903 du devis DE00010790, meuble bas froid positif 4 tiroirs 1345 x 700 x 875 avec dosseret 100 (la nomenclature du plan dit « 3 portes » et la vue 3D en dessine 2 : le devis prime).
+  // Compartiment moteur de 345 mm à l'extrémité nord (le « + » du plan ; grille latérale côté est sur la vue 3D du PDF), puis 2 colonnes de 500 mm x 2 tiroirs vers le sud ; tiroirs côté est (cuisine)
+  const Lc = 1.345, Dc = 0.70, z0 = 0.015;
+  legs(0, z0, Dc, z0 + Lc, 0.15);
+  B(0, 0.15, z0, Dc - 0.02, 0.685, Lc, M.inox, true);                                 // carcass 0.15 → 0.835
+  B(Dc - 0.02, 0.16, z0 + 0.345, 0.012, 0.67, Lc - 0.357, M.black);                    // gaskets / shadow behind the drawers
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { const z = z0 + 0.357 + i * 0.5, y = 0.17 + j * 0.33; B(Dc - 0.008, y, z, 0.018, 0.32, 0.488, M.inoxDoor); pull(Dc + 0.008, y + 0.26, z, 0.488, '+x'); }
+  B(Dc - 0.008, 0.17, z0 + 0.012, 0.018, 0.655, 0.333, M.inoxDoor);                     // motor compartment panel (north end)
+  for (let k = 0; k < 9; k++) B(Dc + 0.010, 0.20 + k * 0.03, z0 + 0.06, 0.004, 0.012, 0.24, M.black);   // ventilation grille slats, lower part
+  B(Dc + 0.010, 0.76, z0 + 0.03, 0.006, 0.05, 0.30, M.panel); display(Dc + 0.017, 0.785, z0 + 0.09, 0.07, 0.018, M.tempR, '+x'); Cyl(Dc + 0.018, 0.785, z0 + 0.20, 0.004, 0.004, M.pilotG, 'x');   // controller band
+  B(0, 0.835, z0, Dc + 0.03, 0.04, Lc, M.inox);                                        // worktop 0.835 → 0.875
+  B(0, 0.875, z0, 0.02, 0.10, Lc, M.inox);                                             // 100 mm dosseret against the wall
+  L('C15', 'Meuble réfrigéré 4 tiroirs', 0.35, 1.15, 0.69);
+  B(0.10, 0.875, 0.26, 0.45, 0.32, 0.30, M.inox); B(0.14, 1.145, 0.30, 0.30, 0.06, 0.22, M.black);
+  B(0.55, 1.135, 0.39, 0.16, 0.02, 0.035, M.black); B(0.47, 0.925, 0.265, 0.07, 0.25, 0.012, M.black);
   L('C14', 'Friteuse à poser', 0.33, 1.5, 0.41);
 }
 
 // ---------- South wall: cooking line ----------
 {
   // C13 combi oven on stand
-  // V8.4 (plan PRJ ind. 0 + devis DE00010790) : table REALINOX 800 x 700 posée 700 le long du mur et 800 en profondeur, dans l'angle ouest ; four UNOX XECC-0523 535 x 672 x 649 dessus, face avant à 0,70 m du mur, charnière côté est (« ferrage à droite » : arc de porte du plan), poignée côté ouest
-  legs(0.03, D - 0.77, 0.67, D - 0.03, 0.88); B(0.03, 0.35, D - 0.77, 0.64, 0.02, 0.74, M.inoxDark); B(0, 0.88, D - 0.80, 0.70, 0.02, 0.80, M.inox); addObs(0, D - 0.80, 0.70, D);
+  // V8.4 (plan PRJ ind. 0 + devis DE00010790) : table adossée REALINOX 800 x 700 posée 700 le long du mur et 800 en profondeur, dans l'angle ouest, dosseret 100 ; four UNOX XECC-0523 535 x 672 x 649 dessus, face avant à 0,70 m du mur.
+  // V8.5 (vue 3D du PDF, zoom sur le four) : bandeau de commande à l'est, poignée au bord est de la porte contre le bandeau, charnière côté ouest (mur) = « ferrage à droite » vu de face
+  legs(0.03, D - 0.77, 0.67, D - 0.03, 0.88); B(0.03, 0.35, D - 0.77, 0.64, 0.02, 0.74, M.inoxDark); B(0, 0.88, D - 0.80, 0.70, 0.02, 0.80, M.inox); B(0, 0.90, D - 0.02, 0.70, 0.10, 0.02, M.inox); addObs(0, D - 0.80, 0.70, D);
   const ox = 0.083, oz = D - 0.70;
   B(ox, 0.9, oz, 0.535, 0.649, 0.672, M.inox);
-  B(ox + 0.02, 0.95, oz - 0.012, 0.36, 0.55, 0.014, M.glassBlack); B(ox + 0.41, 0.95, oz - 0.008, 0.12, 0.55, 0.01, M.panel); B(ox + 0.43, 1.32, oz - 0.012, 0.08, 0.12, 0.006, M.screen);
-  handleV(ox + 0.05, 1.0, oz - 0.012, 0.45); dial(ox + 0.47, 1.14, oz - 0.008, '-z', 0.024); Cyl(ox + 0.44, 1.05, oz - 0.01, 0.004, 0.004, M.pilotG, 'z'); Cyl(ox + 0.50, 1.05, oz - 0.01, 0.004, 0.004, M.pilotO, 'z');
+  B(ox + 0.02, 0.95, oz - 0.012, 0.28, 0.55, 0.014, M.glassBlack); B(ox + 0.30, 0.95, oz - 0.010, 0.09, 0.55, 0.012, M.inoxDoor); B(ox + 0.41, 0.95, oz - 0.008, 0.12, 0.55, 0.01, M.panel); B(ox + 0.43, 1.32, oz - 0.012, 0.08, 0.12, 0.006, M.screen);
+  handleV(ox + 0.345, 1.0, oz - 0.012, 0.45); dial(ox + 0.47, 1.14, oz - 0.008, '-z', 0.024); Cyl(ox + 0.44, 1.05, oz - 0.01, 0.004, 0.004, M.pilotG, 'z'); Cyl(ox + 0.50, 1.05, oz - 0.01, 0.004, 0.004, M.pilotO, 'z');
   B(ox + 0.005, 0.935, oz - 0.016, 0.39, 0.015, 0.012, M.inoxDark); B(ox + 0.005, 1.50, oz - 0.016, 0.39, 0.015, 0.012, M.inoxDark); B(ox + 0.005, 0.935, oz - 0.016, 0.015, 0.58, 0.012, M.inoxDark); B(ox + 0.38, 0.935, oz - 0.016, 0.015, 0.58, 0.012, M.inoxDark);   // door frame
   L('C13', 'Four mixte compact', 0.35, 1.8, 1.83);
   // C10 neutral 400 + C11 induction
   // V8.4 : C10 = module AVEN 700 AV6 « dépose 400 » (400 x 725 x 270) posé sur le soubassement C09, comme C07 ; le corps vient de la boucle des modules plus bas
-  B(0.72, 0.66, 1.476, 0.36, 0.185, 0.008, M.inoxDoor); pull(0.72, 0.80, 1.476, 0.36);   // neutral element drawer
+  B(0.72, 0.63, 1.476, 0.36, 0.185, 0.008, M.inoxDoor); pull(0.72, 0.77, 1.476, 0.36);   // neutral element drawer
   L('C10', 'Élément neutre 400', 0.90, 1.22, 1.83);
-  B(0.745, 0.90, 1.485, 0.31, 0.112, 0.665, M.black); B(0.75, 1.012, 1.49, 0.30, 0.004, 0.655, M.glassBlack);   // V8.4 : C11 ADVENTYS GLN2 3000F 665 x 310 x 112 posée dans le sens de la profondeur (plan), commandes en bout avant
-  dial(0.80, 0.955, 1.485, '-z', 0.014); dial(1.0, 0.955, 1.485, '-z', 0.014); B(0.86, 0.945, 1.481, 0.08, 0.012, 0.004, M.tempR);
-  for (const z of [1.651, 1.984]) { const r = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.11, 32), new THREE.MeshBasicMaterial({ color: 0x5b6066 })); r.rotation.x = -Math.PI / 2; r.position.set(0.90, 1.017, z); scene.add(r); }
+  B(0.745, 0.87, 1.485, 0.31, 0.112, 0.665, M.black); B(0.75, 0.982, 1.49, 0.30, 0.004, 0.655, M.glassBlack);   // V8.4 : C11 ADVENTYS GLN2 3000F 665 x 310 x 112 posée dans le sens de la profondeur (plan), commandes en bout avant
+  dial(0.80, 0.925, 1.485, '-z', 0.014); dial(1.0, 0.925, 1.485, '-z', 0.014); B(0.86, 0.915, 1.481, 0.08, 0.012, 0.004, M.tempR);
+  for (const z of [1.651, 1.984]) { const r = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.11, 32), new THREE.MeshBasicMaterial({ color: 0x5b6066 })); r.rotation.x = -Math.PI / 2; r.position.set(0.90, 0.987, z); scene.add(r); }
   L('C11', 'Induction à poser', 0.90, 1.4, 1.83);
   // C09 CORECO refrigerated base 1600 x 700 x 600, 3 columns x 2 drawers, under the four AVEN 700 modules C10, C08, C07, C06 (plan : 4 x 400 = 1600) — V8.4
-  B(0.70, 0.15, 1.484, 1.60, 0.47, 0.70, M.inoxDark, true); legs(0.70, 1.484, 2.30, 2.184, 0.15);   // dark body = dark seams between the drawer fronts
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { B(0.71 + i * 0.5333, 0.17 + j * 0.23, 1.476, 0.513, 0.21, 0.01, M.inoxDoor); pull(0.71 + i * 0.5333, 0.335 + j * 0.23, 1.476, 0.513); }
+  // V8.5 : hauteur du devis respectée, soubassement 600 (pieds compris) + modules AVEN 270 = plan de cuisson à 870
+  B(0.70, 0.15, 1.484, 1.60, 0.45, 0.70, M.inoxDark, true); legs(0.70, 1.484, 2.30, 2.184, 0.15);   // dark body = dark seams between the drawer fronts
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { B(0.71 + i * 0.5333, 0.165 + j * 0.215, 1.476, 0.513, 0.205, 0.01, M.inoxDoor); pull(0.71 + i * 0.5333, 0.325 + j * 0.215, 1.476, 0.513); }
   L('C09', 'Soubassement réfrigéré 6 tiroirs', 1.50, 0.5, 1.46);
   // C08 plancha, C07 neutral, C06 fryer (700 series tops)
-  B(0.70, 0.62, 1.49, 1.60, 0.28, 0.694, M.plate);                   // dark backing = seams between the three 700-series modules
-  for (const x of [0.70, 1.10, 1.50, 1.90]) { B(x + 0.003, 0.62, 1.484, 0.394, 0.28, 0.70, M.inox); Cyl(x + 0.2, 0.891, 1.493, 0.009, 0.394, M.inox, 'x'); }   // modules with a rolled front edge
-  B(1.13, 0.90, 1.60, 0.34, 0.012, 0.50, M.plate); B(1.13, 0.905, 1.50, 0.34, 0.012, 0.09, M.plate);
-  B(1.13, 0.91, 2.09, 0.34, 0.07, 0.015, M.inox); B(1.13, 0.91, 1.60, 0.012, 0.07, 0.50, M.inox); B(1.458, 0.91, 1.60, 0.012, 0.07, 0.50, M.inox);   // splash guards
-  B(1.103, 0.65, 1.47, 0.394, 0.10, 0.015, M.panel); dial(1.17, 0.70, 1.47); dial(1.26, 0.70, 1.47); Cyl(1.33, 0.70, 1.468, 0.005, 0.004, M.pilotO, 'z');
-  B(1.37, 0.66, 1.462, 0.11, 0.08, 0.01, M.inoxDoor); B(1.38, 0.72, 1.458, 0.09, 0.006, 0.006, M.black);   // grease drawer
+  B(0.70, 0.60, 1.49, 1.60, 0.27, 0.694, M.plate);                   // dark backing = seams between the three 700-series modules
+  for (const x of [0.70, 1.10, 1.50, 1.90]) { B(x + 0.003, 0.60, 1.484, 0.394, 0.27, 0.70, M.inox); Cyl(x + 0.2, 0.861, 1.493, 0.009, 0.394, M.inox, 'x'); }   // modules with a rolled front edge
+  B(1.13, 0.87, 1.60, 0.34, 0.012, 0.50, M.plate); B(1.13, 0.875, 1.50, 0.34, 0.012, 0.09, M.plate);
+  B(1.13, 0.88, 2.09, 0.34, 0.07, 0.015, M.inox); B(1.13, 0.88, 1.60, 0.012, 0.07, 0.50, M.inox); B(1.458, 0.88, 1.60, 0.012, 0.07, 0.50, M.inox);   // splash guards
+  B(1.103, 0.62, 1.47, 0.394, 0.10, 0.015, M.panel); dial(1.17, 0.67, 1.47); dial(1.26, 0.67, 1.47); Cyl(1.33, 0.67, 1.468, 0.005, 0.004, M.pilotO, 'z');
+  B(1.37, 0.63, 1.462, 0.11, 0.08, 0.01, M.inoxDoor); B(1.38, 0.69, 1.458, 0.09, 0.006, 0.006, M.black);   // grease drawer
   L('C08', 'Plancha 400', 1.30, 1.25, 1.83);
-  B(1.52, 0.66, 1.476, 0.36, 0.185, 0.008, M.inoxDoor); pull(1.52, 0.80, 1.476, 0.36);   // neutral element drawer
+  B(1.52, 0.63, 1.476, 0.36, 0.185, 0.008, M.inoxDoor); pull(1.52, 0.77, 1.476, 0.36);   // neutral element drawer
   L('C07', 'Élément neutre 400', 1.70, 1.25, 1.83);
-  for (const [x, z, w, d] of [[1.93, 1.60, 0.34, 0.015], [1.93, 2.065, 0.34, 0.015], [1.93, 1.60, 0.015, 0.48], [2.255, 1.60, 0.015, 0.48]]) B(x, 0.90, z, w, 0.025, d, M.inoxDark);   // fryer well rim
-  B(1.945, 0.90, 1.615, 0.31, 0.012, 0.45, M.oil);
-  B(1.903, 0.65, 1.47, 0.394, 0.10, 0.015, M.panel); display(1.99, 0.70, 1.47, 0.075, 0.028, M.tempF); dial(2.12, 0.70, 1.47); Cyl(2.20, 0.70, 1.468, 0.005, 0.004, M.pilotG, 'z'); Cyl(2.24, 0.70, 1.468, 0.005, 0.004, M.pilotO, 'z');
-  for (const x of [2.0, 2.2]) { Cyl(x, 1.0, 1.50, 0.01, 0.22, M.inoxDark, 'z'); B(x - 0.05, 0.99, 1.37, 0.10, 0.02, 0.03, M.black); B(x - 0.08, 0.86, 1.63, 0.16, 0.14, 0.32, M.wire); }   // baskets
+  for (const [x, z, w, d] of [[1.93, 1.60, 0.34, 0.015], [1.93, 2.065, 0.34, 0.015], [1.93, 1.60, 0.015, 0.48], [2.255, 1.60, 0.015, 0.48]]) B(x, 0.87, z, w, 0.025, d, M.inoxDark);   // fryer well rim
+  B(1.945, 0.87, 1.615, 0.31, 0.012, 0.45, M.oil);
+  B(1.903, 0.62, 1.47, 0.394, 0.10, 0.015, M.panel); display(1.99, 0.67, 1.47, 0.075, 0.028, M.tempF); dial(2.12, 0.67, 1.47); Cyl(2.20, 0.67, 1.468, 0.005, 0.004, M.pilotG, 'z'); Cyl(2.24, 0.67, 1.468, 0.005, 0.004, M.pilotO, 'z');
+  for (const x of [2.0, 2.2]) { Cyl(x, 0.97, 1.50, 0.01, 0.22, M.inoxDark, 'z'); B(x - 0.05, 0.96, 1.37, 0.10, 0.02, 0.03, M.black); B(x - 0.08, 0.83, 1.63, 0.16, 0.14, 0.32, M.wire); }   // baskets
   L('C06', 'Friteuse 400', 2.10, 1.25, 1.83);
-  B(0.70, 0.90, 2.15, 1.60, 0.12, 0.034, M.inox);                     // upstand
+  B(0.70, 0.87, 2.15, 1.60, 0.12, 0.034, M.inox);                     // upstand
   // C12 rod shelf
   for (let k = 0; k < 5; k++) Cyl(1.30, 1.56, 1.90 + k * 0.06, 0.009, 1.20, M.inoxDark, 'x');
   B(0.70, 1.53, 1.884, 1.20, 0.025, 0.025, M.inox); B(0.70, 1.53, 2.14, 1.20, 0.025, 0.03, M.inox);
@@ -482,7 +487,7 @@ const W = 4.933, D = 2.184;                      // interior, metres
     Cyl(x, 1.57 + h / 2, 2.02, r, h, M.inoxDoor); Cyl(x, 1.577 + h, 2.02, r + 0.006, 0.014, M.inoxDoor); Cyl(x, 1.59 + h, 2.02, 0.012, 0.03, M.black);
     B(x - r - 0.035, 1.57 + h - 0.03, 2.01, 0.04, 0.02, 0.02, M.inoxDark); B(x + r, 1.57 + h - 0.03, 2.01, 0.04, 0.02, 0.02, M.inoxDark);
   }
-  B(1.52, 0.90, 1.50, 0.36, 0.018, 0.24, M.white); B(1.53, 0.90, 1.79, 0.165, 0.10, 0.325, M.inoxDoor); B(1.715, 0.90, 1.79, 0.165, 0.10, 0.325, M.inoxDoor);   // cutting board + 2 GN 1/3 on the neutral
+  B(1.52, 0.87, 1.50, 0.36, 0.018, 0.24, M.white); B(1.53, 0.87, 1.79, 0.165, 0.10, 0.325, M.inoxDoor); B(1.715, 0.87, 1.79, 0.165, 0.10, 0.325, M.inoxDoor);   // cutting board + 2 GN 1/3 on the neutral
   B(1.45, 0.0005, 0.95, 0.30, 0.004, 0.30, M.plate); for (let k = 0; k < 5; k++) B(1.47 + k * 0.06, 0.0045, 0.95, 0.015, 0.003, 0.30, M.inoxDark);   // floor drain grate
   L('C12', 'Étagère barreaudée 1 niveau', 1.30, 1.85, 2.0);
   // C21 hood
@@ -492,12 +497,13 @@ const W = 4.933, D = 2.184;                      // interior, metres
   B(1.05, 2.52, 1.75, 0.40, 0.3, 0.40, M.inoxDark);
   B(0.25, 2.092, 1.215, 2.0, 0.008, 0.07, M.lamp);                     // light strip under the hood lip
   L('C21', 'Hotte', 1.25, 2.7, 1.69);
-  // C05 ice machine under a worktop, C04 slicer on it, C03 tilted wall shelf
-  B(2.32, 0.10, 1.65, 0.35, 0.62, 0.53, M.inox, true); B(2.33, 0.12, 1.645, 0.33, 0.16, 0.006, M.black); B(2.335, 0.295, 1.6435, 0.32, 0.41, 0.004, M.plate); B(2.34, 0.30, 1.642, 0.31, 0.40, 0.006, M.inoxDoor); pull(2.34, 0.655, 1.642, 0.31);
-  for (let k = 0; k < 6; k++) B(2.34, 0.13 + k * 0.025, 1.642, 0.31, 0.008, 0.004, M.inoxDoor);   // ventilation grille slats
-  L('C05', 'Machine à glaçons', 2.50, 0.75, 1.65, true);
-  B(2.30, 0.86, 1.584, 1.934, 0.04, 0.60, M.inox, true); B(2.30, 0, 1.60, 0.03, 0.86, 0.03, M.inoxDark); B(2.30, 0, 2.15, 0.03, 0.86, 0.03, M.inoxDark);
-  B(2.30, 0.90, 2.15, 1.934, 0.10, 0.034, M.inox);
+  // C05 ice machine under the counter (plan page 1 : 400 x 520 at 2.38-2.78, under the C04 slicer ; the PDF's perspective puts it at the east end instead — plan kept), C03 wall shelves
+  // V8.5 : machine à glaçons 400 x 520 x 740 avec couvercle de bac, pieds, grille basse (vue 3D du PDF)
+  B(2.38, 0.10, 1.61, 0.40, 0.64, 0.52, M.inox, true); B(2.39, 0.74, 1.62, 0.38, 0.06, 0.50, M.inoxDark); B(2.395, 0.12, 1.605, 0.37, 0.16, 0.006, M.black); B(2.40, 0.295, 1.6035, 0.36, 0.43, 0.004, M.plate); B(2.405, 0.30, 1.602, 0.35, 0.42, 0.006, M.inoxDoor); pull(2.405, 0.675, 1.602, 0.35);
+  for (let k = 0; k < 6; k++) B(2.405, 0.13 + k * 0.025, 1.602, 0.35, 0.008, 0.004, M.inoxDoor);   // ventilation grille slats
+  L('C05', 'Machine à glaçons', 2.58, 0.75, 1.61, true);
+  // V8.5 : comptoir blanc existant de 2,30 à 4,27 m (vue 3D du PDF : plan blanc continu au-dessus de C05/C04 et de C01, joue pleine à l'extrémité est, pas de dosseret)
+  B(2.30, 0.86, 1.584, 1.974, 0.04, 0.60, M.laminate, true); B(4.234, 0, 1.584, 0.04, 0.86, 0.60, M.laminate, true); B(2.30, 0, 1.60, 0.03, 0.86, 0.03, M.inoxDark); B(2.30, 0, 2.15, 0.03, 0.86, 0.03, M.inoxDark);
   B(2.40, 0.90, 1.70, 0.32, 0.08, 0.40, M.alu); B(2.42, 0.98, 1.73, 0.22, 0.03, 0.30, M.inox); B(2.44, 0.98, 1.95, 0.18, 0.14, 0.14, M.alu);
   Cyl(2.67, 1.11, 1.88, 0.14, 0.012, M.plate, 'x'); B(2.60, 1.10, 1.74, 0.06, 0.03, 0.12, M.inoxDark); B(2.42, 1.01, 1.70, 0.03, 0.03, 0.10, M.black);
   { const r = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.008, 8, 40), M.inoxDark); r.rotation.y = Math.PI / 2; r.position.set(2.675, 1.11, 1.88); r.castShadow = true; scene.add(r); }   // blade guard
@@ -507,7 +513,9 @@ const W = 4.933, D = 2.184;                      // interior, metres
   for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.165, 0.09, 0.30), M.inoxDark); p.position.set(-0.185 + i * 0.185, 0.058, -0.175); p.castShadow = true; sh.add(p); }
   const lip = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.05, 0.02), M.inox); lip.position.set(0, 0.02, -0.35); sh.add(lip);
   for (const x of [-0.24, 0.24]) B(2.60 + x - 0.015, 1.30, 2.05, 0.03, 0.18, 0.13, M.inoxDark);
-  L('C03', 'Étagère murale inclinée', 2.60, 1.75, 1.95);
+  // V8.5 : C03 x 2 (devis : 2 étagères 300 x 600) = la vue 3D du PDF montre une étagère plate au-dessus de l'inclinée à bacs GN
+  B(2.30, 1.85, D - 0.30, 0.60, 0.025, 0.30, M.inox); for (const x of [2.36, 2.815]) { B(x, 1.825, D - 0.28, 0.025, 0.025, 0.28, M.inoxDark); B(x, 1.67, D - 0.03, 0.025, 0.18, 0.03, M.inoxDark); }
+  L('C03', 'Étagère murale inclinée ×2', 2.60, 2.0, 1.95);
   // C01 back-bar fridge, 3 glass doors, bottles; C02 coffee machine on top
   B(2.888, 0.10, 1.60, 1.346, 0.76, 0.56, M.black, true); B(2.90, 0.14, 1.62, 1.32, 0.68, 0.50, M.fridgeIn); legs(2.888, 1.60, 4.234, 2.16, 0.10, 0.03);
   const bl = [];
@@ -521,6 +529,7 @@ const W = 4.933, D = 2.184;                      // interior, metres
   for (let d = 0; d <= 3; d++) B(2.888 + d * 0.4487 - 0.01, 0.10, 1.59, 0.02, 0.76, 0.02, M.black);
   L('C01', 'Arrière-bar réfrigéré 3 portes', 3.56, 0.70, 1.56, true);
   // C02 espresso machine, 3 groups: base with clock, drip tray + grille in front, brushed body, dark control band, cup deck
+  const n02 = scene.children.length;   // V8.5 : tout ce bloc est décalé de +0,25 m vers l'est après coup (plan : repère C02 à l'extrémité est de C01 ; vue 3D du PDF : machine sur la partie est du comptoir)
   B(3.05, 0.90, 1.63, 0.90, 0.06, 0.52, M.inoxDark); B(3.06, 0.905, 1.626, 0.88, 0.05, 0.006, M.panel); display(3.10, 0.916, 1.626, 0.07, 0.022, M.clock);
   B(3.07, 0.96, 1.64, 0.86, 0.03, 0.12, M.inoxDark); B(3.08, 0.99, 1.645, 0.84, 0.008, 0.10, M.grille);
   B(3.05, 0.96, 1.75, 0.90, 0.26, 0.40, M.inoxMach); B(3.05, 1.22, 1.745, 0.90, 0.08, 0.405, M.panel);
@@ -534,7 +543,8 @@ const W = 4.933, D = 2.184;                      // interior, metres
   tube(3.12, 1.22, 1.73, 3.02, 0.99, 1.65, 0.007, M.chrome); tube(3.02, 0.99, 1.65, 3.005, 0.955, 1.64, 0.009, M.black);
   tube(3.88, 1.22, 1.73, 3.98, 0.99, 1.65, 0.007, M.chrome); tube(3.98, 0.99, 1.65, 3.995, 0.955, 1.64, 0.009, M.black);
   const cl = []; for (let i = 0; i < 8; i++) for (let j = 0; j < 3; j++) cl.push([3.125 + i * 0.107, 1.34, 1.79 + j * 0.12]); cups(cl);
-  L('C02', 'Machine à café', 3.50, 1.6, 1.90, true);
+  for (let i = n02; i < scene.children.length; i++) scene.children[i].position.x += 0.25;   // V8.5 : machine à café de 3,30 à 4,20 m
+  L('C02', 'Machine à café', 3.75, 1.6, 1.90, true);
 }
 
 // ---------- North side (bar): C16, C17, C18, C19, C20 ----------
@@ -722,7 +732,45 @@ $('b-real').addEventListener('click', e => {
 if (!isTouch) $('b-real').click();                                    // on computers the photo finish (AO, MSAA, grain) is on by default
 $('b-legend').addEventListener('click', e => { $('legend').hidden = !$('legend').hidden; e.currentTarget.classList.toggle('on', !$('legend').hidden); });
 $('b-help').addEventListener('click', () => { $('help').hidden = false; });
-$('b-start').addEventListener('click', () => { $('help').hidden = true; });
+$('b-start').addEventListener('click', () => { $('help').hidden = true; ambStart(); });
+
+// ---------- Ambiance sonore de halle (V8.5) : tout est synthétisé en Web Audio, aucun fichier audio ----------
+// brouhaha (bruit rose filtré, vagues lentes), voix proches (bouffées filtrées), verres, vaisselle, pas, souffle de la hotte près de la ligne de cuisson,
+// réverbération de halle (réponse impulsionnelle synthétique de 2,8 s). Démarre au clic « Entrer dans le stand » (geste utilisateur obligatoire), bouton « Son » pour couper.
+let AMB = null, ambOn = true;
+function ambStart() {
+  if (AMB || !ambOn) return;
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  const ac = new AC(), master = ac.createGain(); master.gain.value = 0.0001; master.connect(ac.destination);
+  const len = Math.floor(ac.sampleRate * 2.8), ir = ac.createBuffer(2, len, ac.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2) * Math.min(1, i / 2000); }
+  const rev = ac.createConvolver(); rev.buffer = ir; const revG = ac.createGain(); revG.gain.value = 0.5; rev.connect(revG).connect(master);
+  const dry = ac.createGain(); dry.gain.value = 0.7; dry.connect(master); dry.connect(rev);
+  const nb = ac.createBuffer(1, ac.sampleRate * 4, ac.sampleRate), nd = nb.getChannelData(0);
+  let b0 = 0, b1 = 0, b2 = 0; for (let i = 0; i < nd.length; i++) { const w = Math.random() * 2 - 1; b0 = 0.997 * b0 + 0.03 * w; b1 = 0.985 * b1 + 0.08 * w; b2 = 0.95 * b2 + 0.2 * w; nd[i] = (b0 + b1 + b2 + w * 0.05) * 0.35; }
+  const noise = (gain, f, q, dest) => { const s = ac.createBufferSource(); s.buffer = nb; s.loop = true; const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q; const g = ac.createGain(); g.gain.value = gain; s.connect(bp).connect(g).connect(dest); s.start(); return { s, bp, g }; };
+  const murmur = noise(0.6, 500, 0.7, dry), hiss = noise(0.08, 4000, 0.5, rev), hood = noise(0, 170, 1.2, dry);
+  const wave = () => { murmur.g.gain.setTargetAtTime(0.35 + Math.random() * 0.5, ac.currentTime, 0.8); murmur.bp.frequency.setTargetAtTime(380 + Math.random() * 350, ac.currentTime, 1.2); setTimeout(wave, 900 + Math.random() * 2200); }; wave();
+  const voice = () => { const t = ac.currentTime, s = ac.createBufferSource(); s.buffer = nb; s.loop = true; s.playbackRate.value = 0.8 + Math.random() * 0.5;
+    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 350 + Math.random() * 700; bp.Q.value = 4; const g = ac.createGain(); g.gain.value = 0;
+    s.connect(bp).connect(g).connect(dry); s.start(t); const n = 2 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < n; i++) { const a = t + i * 0.22; g.gain.setTargetAtTime(0.25 + Math.random() * 0.2, a, 0.03); g.gain.setTargetAtTime(0, a + 0.12, 0.04); }
+    s.stop(t + n * 0.22 + 0.3); setTimeout(voice, 400 + Math.random() * 2500); }; voice();
+  const clink = () => { const t = ac.currentTime; for (const [f, a] of [[2400 + Math.random() * 900, 0.08], [3900 + Math.random() * 1200, 0.04]]) { const o = ac.createOscillator(); o.frequency.value = f; const g = ac.createGain(); g.gain.setValueAtTime(a, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35); o.connect(g).connect(rev); o.start(t); o.stop(t + 0.4); } setTimeout(clink, 2500 + Math.random() * 9000); }; setTimeout(clink, 3000);
+  const plate = () => { const t = ac.currentTime, s = ac.createBufferSource(); s.buffer = nb; const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500; const g = ac.createGain(); g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12); s.connect(hp).connect(g).connect(rev); s.start(t); s.stop(t + 0.15); setTimeout(plate, 4000 + Math.random() * 12000); }; setTimeout(plate, 6000);
+  const steps = () => { const t = ac.currentTime, n = 4 + Math.floor(Math.random() * 6), dt = 0.42 + Math.random() * 0.2;
+    for (let i = 0; i < n; i++) { const s = ac.createBufferSource(); s.buffer = nb; const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220; const g = ac.createGain(); const a = t + i * dt; g.gain.setValueAtTime(0.0001, a); g.gain.exponentialRampToValueAtTime(0.8, a + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, a + 0.09); s.connect(lp).connect(g).connect(dry); s.start(a); s.stop(a + 0.1); }
+    setTimeout(steps, n * dt * 1000 + 2000 + Math.random() * 8000); }; setTimeout(steps, 2000);
+  master.gain.setTargetAtTime(0.35, ac.currentTime, 1.5);
+  AMB = { ac, master };
+  setInterval(() => {   // plus de foule côté clients (z < 0), souffle de la hotte plus fort sous la hotte (x < 2,5, z > 1,2)
+    if (!AMB) return; const p = camera.position, k = THREE.MathUtils.clamp((1.2 - p.z) / 2.4, 0, 1), dh = Math.hypot(Math.max(0, p.x - 2.5), Math.max(0, 1.2 - p.z));
+    dry.gain.setTargetAtTime(0.45 + 0.4 * k, ac.currentTime, 0.5); hood.g.gain.setTargetAtTime(0.9 * THREE.MathUtils.clamp(1 - dh / 3, 0, 1), ac.currentTime, 0.5);
+  }, 400);
+}
+function ambToggle(on) { ambOn = on; if (!AMB) { if (on) ambStart(); return; } if (on) AMB.ac.resume(); AMB.master.gain.setTargetAtTime(on ? 0.35 : 0.0001, AMB.ac.currentTime, 0.3); }
+$('b-son').addEventListener('click', e => { const on = !e.currentTarget.classList.contains('on'); e.currentTarget.classList.toggle('on', on); ambToggle(on); });
+addEventListener('visibilitychange', () => { if (AMB) { if (document.hidden) AMB.ac.suspend(); else if (ambOn) AMB.ac.resume(); } });
 if (isTouch) { $('joy').hidden = false; $('b-gyro').hidden = false; }
 
 let toastT; function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3200); }
@@ -859,6 +907,6 @@ function tick() {
 }
 setView('chef'); resize();
 renderer.setAnimationLoop(tick);
-window.DBG = { scene, renderer, camera, M, THREE, hallG, people, usdz: buildUSDZ, look: (x, z, tx, tz, p = -0.1) => { planMode = false; pos.set(x, EYE, z); yaw = lookYaw(x, z, tx, tz); pitch = p; } };   // console access for tuning: DBG.look(x, z, targetX, targetZ)
+window.DBG = { scene, renderer, camera, M, THREE, hallG, people, usdz: buildUSDZ, amb: () => AMB, look: (x, z, tx, tz, p = -0.1) => { planMode = false; pos.set(x, EYE, z); yaw = lookYaw(x, z, tx, tz); pitch = p; } };   // console access for tuning: DBG.look(x, z, targetX, targetZ)
 </script>
 </body></html>
