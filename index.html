@@ -1,4 +1,4 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#0f161c"></head><body><meta charset="utf-8">
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#0f161c"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-180.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black"><meta name="apple-mobile-web-app-title" content="Halles 3D"></head><body><meta charset="utf-8">
 <meta charset="utf-8">
 <title>Stand Halles de Biarritz</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&display=swap">
@@ -50,7 +50,7 @@ button.chip.on{background:var(--accent);color:var(--accent-fg);border-color:tran
 button.primary{font:700 14px var(--font);background:var(--accent);color:var(--accent-fg);border:0;border-radius:10px;padding:11px 16px;width:100%;cursor:pointer}
 #vrwrap{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 44px);display:flex;justify-content:center;gap:10px;pointer-events:none;z-index:999}
 #vrwrap button{position:static !important;transform:none;pointer-events:auto;font-family:var(--font) !important}
-#ar-link{display:inline-flex;align-items:center}#ar-link img{height:30px;display:block}#b-usdz[hidden],#ar-link[hidden]{display:none}
+#ar-link{display:inline-flex;align-items:center}#ar-link img{height:30px;display:block}#b-usdz[hidden],#b-install[hidden],#ar-link[hidden]{display:none}
 @media (max-width:600px){ #note{display:none} .brand span{display:none} }
 @media (prefers-reduced-motion: reduce){ #toast{transition:none} }
 </style>
@@ -67,6 +67,7 @@ button.primary{font:700 14px var(--font);background:var(--accent);color:var(--ac
     <button class="chip" id="b-labels">Repères</button>
     <button class="chip on" id="b-people">Personnes</button>
     <button class="chip" id="b-usdz" hidden>AR iPhone</button>
+    <button class="chip" id="b-install" hidden>Installer</button>
     <a id="ar-link" rel="ar" hidden><img alt="Voir en réalité augmentée" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='118' height='30'%3E%3Crect width='118' height='30' rx='15' fill='%23c8102e'/%3E%3Ctext x='59' y='20' font-family='system-ui,sans-serif' font-size='13' font-weight='600' fill='white' text-anchor='middle'%3EVoir en AR%3C/text%3E%3C/svg%3E"></a>
     <button class="chip" id="b-real">Rendu réel</button>
     <button class="chip" id="b-legend">Liste</button>
@@ -792,6 +793,17 @@ async function buildUSDZ() {
   try { return await new USDZExporter().parseAsync(scene, { quickLookCompatible: true, maxTextureSize: 1024 }); }
   finally { offs.forEach((o, i) => o.visible = vis[i]); }
 }
+// ---------- Installation comme application (V8.3, GitHub Pages seulement : site/manifest.webmanifest + site/sw.js + icônes) ----------
+const onPages = /github\.io$/.test(location.hostname), standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+if ('serviceWorker' in navigator && onPages) navigator.serviceWorker.register('sw.js').catch(() => {});
+let installEvt = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (!standalone) $('b-install').hidden = false; });
+addEventListener('appinstalled', () => { $('b-install').hidden = true; installEvt = null; toast('Application installée : lance-la depuis l\'écran d\'accueil ou le Dock.'); });
+if (onPages && isIOS && !standalone) $('b-install').hidden = false;
+$('b-install').addEventListener('click', async () => {
+  if (installEvt) { installEvt.prompt(); const r = await installEvt.userChoice; if (r.outcome === 'accepted') $('b-install').hidden = true; installEvt = null; }
+  else toast(isIOS ? 'Safari : bouton Partager (carré avec flèche) → « Sur l\'écran d\'accueil » → Ajouter.' : 'Chrome : icône « Installer » à droite de la barre d\'adresse. Safari Mac : menu Fichier → Ajouter au Dock.');
+});
 $('b-usdz').hidden = !isIOS;
 $('b-usdz').addEventListener('click', async e => {
   const btn = e.currentTarget; btn.disabled = true; toast('Préparation du modèle AR (USDZ)…');

@@ -1,0 +1,18 @@
+{
+  "id": "/stand-halles-biarritz-3d/",
+  "name": "Stand Halles de Biarritz – visite 3D",
+  "short_name": "Halles 3D",
+  "description": "Visite immersive 3D, VR et AR du stand des Halles de Biarritz (EVI PRO).",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f161c",
+  "theme_color": "#0f161c",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
