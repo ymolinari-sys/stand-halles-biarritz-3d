@@ -438,26 +438,29 @@ const W = 4.933, D = 2.184;                      // interior, metres
 // ---------- South wall: cooking line ----------
 {
   // C13 combi oven on stand
-  legs(0.08, 1.50, 0.63, 2.16, 0.88); B(0.08, 0.35, 1.50, 0.55, 0.02, 0.66, M.inoxDark); B(0.08, 0.88, 1.50, 0.55, 0.02, 0.66, M.inox); addObs(0.08, 1.50, 0.63, 2.16);
-  B(0.08, 0.9, 1.50, 0.55, 0.65, 0.66, M.inox);
-  B(0.10, 0.95, 1.488, 0.36, 0.55, 0.014, M.glassBlack); B(0.49, 0.95, 1.492, 0.12, 0.55, 0.01, M.panel); B(0.51, 1.32, 1.488, 0.08, 0.12, 0.006, M.screen);
-  handleV(0.42, 1.0, 1.488, 0.45); dial(0.55, 1.14, 1.492, '-z', 0.024); Cyl(0.52, 1.05, 1.49, 0.004, 0.004, M.pilotG, 'z'); Cyl(0.58, 1.05, 1.49, 0.004, 0.004, M.pilotO, 'z');
-  B(0.085, 0.935, 1.484, 0.39, 0.015, 0.012, M.inoxDark); B(0.085, 1.50, 1.484, 0.39, 0.015, 0.012, M.inoxDark); B(0.085, 0.935, 1.484, 0.015, 0.58, 0.012, M.inoxDark); B(0.46, 0.935, 1.484, 0.015, 0.58, 0.012, M.inoxDark);   // door frame
-  L('C13', 'Four mixte compact', 0.355, 1.8, 1.83);
+  // V8.4 (plan PRJ ind. 0 + devis DE00010790) : table REALINOX 800 x 700 posée 700 le long du mur et 800 en profondeur, dans l'angle ouest ; four UNOX XECC-0523 535 x 672 x 649 dessus, face avant à 0,70 m du mur, charnière côté est (« ferrage à droite » : arc de porte du plan), poignée côté ouest
+  legs(0.03, D - 0.77, 0.67, D - 0.03, 0.88); B(0.03, 0.35, D - 0.77, 0.64, 0.02, 0.74, M.inoxDark); B(0, 0.88, D - 0.80, 0.70, 0.02, 0.80, M.inox); addObs(0, D - 0.80, 0.70, D);
+  const ox = 0.083, oz = D - 0.70;
+  B(ox, 0.9, oz, 0.535, 0.649, 0.672, M.inox);
+  B(ox + 0.02, 0.95, oz - 0.012, 0.36, 0.55, 0.014, M.glassBlack); B(ox + 0.41, 0.95, oz - 0.008, 0.12, 0.55, 0.01, M.panel); B(ox + 0.43, 1.32, oz - 0.012, 0.08, 0.12, 0.006, M.screen);
+  handleV(ox + 0.05, 1.0, oz - 0.012, 0.45); dial(ox + 0.47, 1.14, oz - 0.008, '-z', 0.024); Cyl(ox + 0.44, 1.05, oz - 0.01, 0.004, 0.004, M.pilotG, 'z'); Cyl(ox + 0.50, 1.05, oz - 0.01, 0.004, 0.004, M.pilotO, 'z');
+  B(ox + 0.005, 0.935, oz - 0.016, 0.39, 0.015, 0.012, M.inoxDark); B(ox + 0.005, 1.50, oz - 0.016, 0.39, 0.015, 0.012, M.inoxDark); B(ox + 0.005, 0.935, oz - 0.016, 0.015, 0.58, 0.012, M.inoxDark); B(ox + 0.38, 0.935, oz - 0.016, 0.015, 0.58, 0.012, M.inoxDark);   // door frame
+  L('C13', 'Four mixte compact', 0.35, 1.8, 1.83);
   // C10 neutral 400 + C11 induction
-  B(0.70, 0.12, 1.484, 0.40, 0.78, 0.70, M.inox, true); legs(0.70, 1.484, 1.10, 2.184, 0.12);
-  B(0.705, 0.29, 1.4825, 0.39, 0.52, 0.004, M.plate); B(0.71, 0.3, 1.482, 0.38, 0.5, 0.01, M.inoxDoor); pull(0.71, 0.755, 1.482, 0.38);   // dark reveal around the door, recessed grip
+  // V8.4 : C10 = module AVEN 700 AV6 « dépose 400 » (400 x 725 x 270) posé sur le soubassement C09, comme C07 ; le corps vient de la boucle des modules plus bas
+  B(0.72, 0.66, 1.476, 0.36, 0.185, 0.008, M.inoxDoor); pull(0.72, 0.80, 1.476, 0.36);   // neutral element drawer
   L('C10', 'Élément neutre 400', 0.90, 1.22, 1.83);
-  B(0.72, 0.9, 1.55, 0.36, 0.055, 0.60, M.black); dial(0.80, 0.927, 1.55, '-z', 0.014); dial(1.0, 0.927, 1.55, '-z', 0.014); B(0.86, 0.92, 1.546, 0.08, 0.012, 0.004, M.tempR);
-  for (const z of [1.72, 2.0]) { const r = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.11, 32), new THREE.MeshBasicMaterial({ color: 0x5b6066 })); r.rotation.x = -Math.PI / 2; r.position.set(0.90, 0.956, z); scene.add(r); }
+  B(0.745, 0.90, 1.485, 0.31, 0.112, 0.665, M.black); B(0.75, 1.012, 1.49, 0.30, 0.004, 0.655, M.glassBlack);   // V8.4 : C11 ADVENTYS GLN2 3000F 665 x 310 x 112 posée dans le sens de la profondeur (plan), commandes en bout avant
+  dial(0.80, 0.955, 1.485, '-z', 0.014); dial(1.0, 0.955, 1.485, '-z', 0.014); B(0.86, 0.945, 1.481, 0.08, 0.012, 0.004, M.tempR);
+  for (const z of [1.651, 1.984]) { const r = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.11, 32), new THREE.MeshBasicMaterial({ color: 0x5b6066 })); r.rotation.x = -Math.PI / 2; r.position.set(0.90, 1.017, z); scene.add(r); }
   L('C11', 'Induction à poser', 0.90, 1.4, 1.83);
-  // C09 refrigerated base, 6 drawers
-  B(1.10, 0.15, 1.484, 1.20, 0.47, 0.70, M.inoxDark, true); legs(1.10, 1.484, 2.30, 2.184, 0.15);   // dark body = dark seams between the drawer fronts
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { B(1.11 + i * 0.40, 0.17 + j * 0.23, 1.476, 0.38, 0.21, 0.01, M.inoxDoor); pull(1.11 + i * 0.40, 0.335 + j * 0.23, 1.476, 0.38); }
-  L('C09', 'Soubassement réfrigéré 6 tiroirs', 1.70, 0.5, 1.46);
+  // C09 CORECO refrigerated base 1600 x 700 x 600, 3 columns x 2 drawers, under the four AVEN 700 modules C10, C08, C07, C06 (plan : 4 x 400 = 1600) — V8.4
+  B(0.70, 0.15, 1.484, 1.60, 0.47, 0.70, M.inoxDark, true); legs(0.70, 1.484, 2.30, 2.184, 0.15);   // dark body = dark seams between the drawer fronts
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { B(0.71 + i * 0.5333, 0.17 + j * 0.23, 1.476, 0.513, 0.21, 0.01, M.inoxDoor); pull(0.71 + i * 0.5333, 0.335 + j * 0.23, 1.476, 0.513); }
+  L('C09', 'Soubassement réfrigéré 6 tiroirs', 1.50, 0.5, 1.46);
   // C08 plancha, C07 neutral, C06 fryer (700 series tops)
-  B(1.10, 0.62, 1.49, 1.20, 0.28, 0.694, M.plate);                   // dark backing = seams between the three 700-series modules
-  for (const x of [1.10, 1.50, 1.90]) { B(x + 0.003, 0.62, 1.484, 0.394, 0.28, 0.70, M.inox); Cyl(x + 0.2, 0.891, 1.493, 0.009, 0.394, M.inox, 'x'); }   // modules with a rolled front edge
+  B(0.70, 0.62, 1.49, 1.60, 0.28, 0.694, M.plate);                   // dark backing = seams between the three 700-series modules
+  for (const x of [0.70, 1.10, 1.50, 1.90]) { B(x + 0.003, 0.62, 1.484, 0.394, 0.28, 0.70, M.inox); Cyl(x + 0.2, 0.891, 1.493, 0.009, 0.394, M.inox, 'x'); }   // modules with a rolled front edge
   B(1.13, 0.90, 1.60, 0.34, 0.012, 0.50, M.plate); B(1.13, 0.905, 1.50, 0.34, 0.012, 0.09, M.plate);
   B(1.13, 0.91, 2.09, 0.34, 0.07, 0.015, M.inox); B(1.13, 0.91, 1.60, 0.012, 0.07, 0.50, M.inox); B(1.458, 0.91, 1.60, 0.012, 0.07, 0.50, M.inox);   // splash guards
   B(1.103, 0.65, 1.47, 0.394, 0.10, 0.015, M.panel); dial(1.17, 0.70, 1.47); dial(1.26, 0.70, 1.47); Cyl(1.33, 0.70, 1.468, 0.005, 0.004, M.pilotO, 'z');
@@ -470,7 +473,7 @@ const W = 4.933, D = 2.184;                      // interior, metres
   B(1.903, 0.65, 1.47, 0.394, 0.10, 0.015, M.panel); display(1.99, 0.70, 1.47, 0.075, 0.028, M.tempF); dial(2.12, 0.70, 1.47); Cyl(2.20, 0.70, 1.468, 0.005, 0.004, M.pilotG, 'z'); Cyl(2.24, 0.70, 1.468, 0.005, 0.004, M.pilotO, 'z');
   for (const x of [2.0, 2.2]) { Cyl(x, 1.0, 1.50, 0.01, 0.22, M.inoxDark, 'z'); B(x - 0.05, 0.99, 1.37, 0.10, 0.02, 0.03, M.black); B(x - 0.08, 0.86, 1.63, 0.16, 0.14, 0.32, M.wire); }   // baskets
   L('C06', 'Friteuse 400', 2.10, 1.25, 1.83);
-  B(1.10, 0.90, 2.15, 1.20, 0.12, 0.034, M.inox);                     // upstand
+  B(0.70, 0.90, 2.15, 1.60, 0.12, 0.034, M.inox);                     // upstand
   // C12 rod shelf
   for (let k = 0; k < 5; k++) Cyl(1.30, 1.56, 1.90 + k * 0.06, 0.009, 1.20, M.inoxDark, 'x');
   B(0.70, 1.53, 1.884, 1.20, 0.025, 0.025, M.inox); B(0.70, 1.53, 2.14, 1.20, 0.025, 0.03, M.inox);
