@@ -418,9 +418,16 @@ const W = 4.933, D = 2.184;                      // interior, metres
 
 // ---------- West wall: C15 refrigerated cabinet + C14 countertop fryer ----------
 {
-  B(0, 0.12, 0, 0.69, 0.78, 1.372, M.inoxDark, true); legs(0, 0, 0.69, 1.372, 0.12);   // dark body = seams around the doors
-  B(0.69, 0.86, 0.01, 0.008, 0.04, 1.352, M.panel); display(0.698, 0.88, 0.14, 0.07, 0.02, M.tempR, '+x'); Cyl(0.699, 0.88, 0.22, 0.004, 0.004, M.pilotG, 'x');
-  for (let i = 0; i < 3; i++) { B(0.69, 0.16, 0.015 + i * 0.452, 0.012, 0.69, 0.44, M.inoxDoor); handleV(0.702, 0.30, 0.42 + i * 0.452, 0.40, '+x'); }
+  // Refrigerated counter 1372 x 690, worktop at 900 (V8.1): satin body on 150 mm feet, black gasket plate behind three flush doors (12 mm reveals),
+  // recessed grip along the top of each door, controller on the top rail, 40 mm worktop with a 30 mm front overhang and a 100 mm rear upstand
+  const Lc = 1.372, Dc = 0.69, dw = (Lc - 0.04 - 0.024) / 3;           // 3 doors of 0.436 m
+  legs(0, 0, Dc, Lc, 0.15);
+  B(0, 0.15, 0, Dc - 0.02, 0.71, Lc, M.inox, true);                                  // carcass 0.15 → 0.86
+  B(Dc - 0.02, 0.16, 0.012, 0.012, 0.70, Lc - 0.024, M.black);                       // gaskets / shadow behind the doors
+  for (let i = 0; i < 3; i++) { const z = 0.02 + i * (dw + 0.012); B(Dc - 0.008, 0.17, z, 0.018, 0.63, dw, M.inoxDoor); pull(Dc + 0.008, 0.78, z, dw, '+x'); }
+  B(Dc - 0.008, 0.826, 0.06, 0.006, 0.03, 0.16, M.panel); display(Dc, 0.841, 0.11, 0.07, 0.018, M.tempR, '+x'); Cyl(Dc + 0.001, 0.841, 0.19, 0.004, 0.004, M.pilotG, 'x');
+  B(0, 0.86, 0, Dc + 0.03, 0.04, Lc, M.inox);                                        // worktop
+  B(0, 0.90, 0, 0.02, 0.10, Lc, M.inox);                                              // rear upstand against the wall
   L('C15', 'Meuble réfrigéré 3 portes', 0.35, 1.15, 0.69);
   B(0.10, 0.9, 0.26, 0.45, 0.32, 0.30, M.inox); B(0.14, 1.17, 0.30, 0.30, 0.06, 0.22, M.black);
   B(0.55, 1.16, 0.39, 0.16, 0.02, 0.035, M.black); B(0.47, 0.95, 0.265, 0.07, 0.25, 0.012, M.black);
