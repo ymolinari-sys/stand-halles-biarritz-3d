@@ -1,7 +1,7 @@
 // Service worker de la visite 3D (GitHub Pages) : la page est servie « réseau d'abord » (les nouvelles versions arrivent),
 // les ressources (textures, avatars GLB, three.js sur cdn.jsdelivr.net) « cache d'abord » (hors-ligne après la première visite).
 // Si une ressource change de contenu sans changer de nom : incrémenter CACHE.
-const CACHE = 'halles3d-v1';
+const CACHE = 'halles3d-v2';   // v2 = V9 textures (assets/tex/v9), the old ones are purged
 const PRE = ['./index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

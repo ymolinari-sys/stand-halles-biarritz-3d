@@ -121,6 +121,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches;
+const LOWMEM = isTouch || /OculusBrowser|Quest|Pico|Wolvic/i.test(navigator.userAgent);   // phones, tablets, standalone headsets: 1K textures, fewer maps
 const canvas = $('c');
 
 // ---------- Renderer / scene ----------
@@ -216,21 +217,34 @@ const T = {
   brush: (rx, ry) => mkTex(512, 512, drawBrush, rx, ry, true),
   stone: (rx, ry) => mkTex(512, 512, drawStone, rx, ry),
 };
-const brushA = T.brush(2, 2), brushB = T.brush(3, 1.5);
+// V9 PBR set (assets/tex/v9, CC0 ambientCG / Poly Haven + procedural tiles): UVs are in metres (see worldUV), so repeat = 1 / real size of one texture tile.
+// 2K on computers for the big close surfaces, 1K everywhere else and on phones / headsets (GPU memory). ORM = R ambient occlusion, G roughness, B metalness.
+const MAXA = renderer.capabilities.getMaxAnisotropy(), HI2K = new Set(['inox', 'metro', 'sol', 'marble', 'oak', 'imp']), FAR = new Set(['hwall', 'hfloor', 'iron', 'crate']), WUV = new Set();   // FAR: no normal map on phones (GPU memory)
+function tex9(set, kind, size, rot, cb) {
+  loadTex(`v9/${!LOWMEM && HI2K.has(set) ? '2k' : '1k'}/${set}_${kind}.jpg`, kind === 'c' && set !== 'imp' && set !== 'dust', t => { t.repeat.set(1 / size, 1 / size); t.rotation = rot; t.anisotropy = LOWMEM ? Math.min(4, MAXA) : MAXA; cb(t); });
+}
+function pbr(set, size, list, { c = true, n = !(LOWMEM && FAR.has(set)), rot = 0 } = {}) {   // list: [material, props applied with the colour map, normalScale]
+  list.forEach(([m]) => WUV.add(m));
+  if (c) tex9(set, 'c', size, rot, t => list.forEach(([m, cp = {}]) => upd(m, { map: t, ...cp })));
+  if (n) tex9(set, 'n', size, rot, t => list.forEach(([m, , ns = 1]) => upd(m, { normalMap: t, normalScale: new THREE.Vector2(ns, ns), bumpMap: null })));
+  tex9(set, 'orm', size, rot, t => list.forEach(([m]) => upd(m, { roughnessMap: t, aoMap: t, ...(m.metalness > 0 ? { metalnessMap: t } : {}) })));
+}
+const Cs = s => new THREE.Color().setScalar(s), Cx = h => new THREE.Color(h);
 
 // ---------- Materials ----------
 const M = {
-  inox: new THREE.MeshPhysicalMaterial({ color: 0xcdd0d3, metalness: 1, roughness: 0.46, roughnessMap: brushA, bumpMap: brushA, bumpScale: 0.0012, anisotropy: 0.7, envMapIntensity: 0.85 }),
-  inoxDoor: new THREE.MeshPhysicalMaterial({ color: 0xc9cdd0, metalness: 1, roughness: 0.42, roughnessMap: brushB, bumpMap: brushB, bumpScale: 0.0012, anisotropy: 0.8, envMapIntensity: 0.95 }),
-  inoxDark: new THREE.MeshStandardMaterial({ color: 0x7e8488, metalness: 0.9, roughness: 0.48, roughnessMap: brushB, envMapIntensity: 0.85 }),
-  plate: new THREE.MeshStandardMaterial({ color: 0x50555a, metalness: 1, roughness: 0.62, roughnessMap: brushA }),
+  // brushed 304 (scotch-brite): grain along U (horizontal on fronts), anisotropic highlight stretched across the grain; roughness = factor × map (map mean ≈ 0.47)
+  inox: new THREE.MeshPhysicalMaterial({ color: 0xc2c1be, metalness: 1, roughness: 0.45, anisotropy: 0.2, anisotropyRotation: Math.PI / 2, envMapIntensity: 0.95 }),
+  inoxDoor: new THREE.MeshPhysicalMaterial({ color: 0xbfbebb, metalness: 1, roughness: 0.42, anisotropy: 0.25, anisotropyRotation: Math.PI / 2, envMapIntensity: 1.05 }),
+  inoxDark: new THREE.MeshPhysicalMaterial({ color: 0x7e8488, metalness: 1, roughness: 0.9, anisotropy: 0.4, anisotropyRotation: Math.PI / 2, envMapIntensity: 0.85 }),
+  plate: new THREE.MeshStandardMaterial({ color: 0x50555a, metalness: 1, roughness: 0.55 }),               // dark steel: seams between modules, filter housing, drain, panels (the plancha has its own M.plancha)
   alu: new THREE.MeshStandardMaterial({ color: 0xdadcdc, metalness: 0.7, roughness: 0.45 }),
   brass: new THREE.MeshStandardMaterial({ color: 0xb8925a, metalness: 1, roughness: 0.3 }),
   wire: new THREE.MeshStandardMaterial({ color: 0x9aa0a5, metalness: 0.9, roughness: 0.4, transparent: true, opacity: 0.5 }),
   lamp: new THREE.MeshStandardMaterial({ color: 0xfff6e2, emissive: 0xfff0cc, emissiveIntensity: 2.2, roughness: 0.4 }),
   seat: new THREE.MeshStandardMaterial({ color: 0x2b2b30, roughness: 0.55 }),
   shade: new THREE.MeshStandardMaterial({ color: 0x1c1e22, metalness: 0.4, roughness: 0.5, side: THREE.DoubleSide }),
-  black: new THREE.MeshStandardMaterial({ color: 0x17191c, metalness: 0.3, roughness: 0.55 }),
+  black: new THREE.MeshStandardMaterial({ color: 0x17191c, metalness: 0, roughness: 1 }),             // moulded black plastic (Plastic012A: roughness ≈ 0.40 with scuffs)
   screen: new THREE.MeshStandardMaterial({ color: 0x0b2a4a, emissive: 0x1d5e9e, emissiveIntensity: 0.9, roughness: 0.3 }),
   glassDark: new THREE.MeshPhysicalMaterial({ color: 0x1e262e, metalness: 0.2, roughness: 0.08, transparent: true, opacity: 0.88 }),
   glass: new THREE.MeshPhysicalMaterial({ color: 0xdfeeff, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.28, side: THREE.DoubleSide }),
@@ -238,24 +252,23 @@ const M = {
   bottle: new THREE.MeshPhysicalMaterial({ color: 0x7db6e8, transparent: true, opacity: 0.8, roughness: 0.15, metalness: 0 }),
   white: new THREE.MeshStandardMaterial({ color: 0xf4f3ef, roughness: 0.55 }),
   paint: new THREE.MeshStandardMaterial({ color: 0xd9d5cc, roughness: 0.95 }),
-  stone: new THREE.MeshStandardMaterial({ map: T.stone(4, 1), roughness: 0.28, metalness: 0.05, envMapIntensity: 0.9 }),
-  laminate: new THREE.MeshStandardMaterial({ color: 0xcdc7bd, roughness: 0.6 }),
-  hallWall: new THREE.MeshStandardMaterial({ color: 0xb3a692, roughness: 0.95 }),
-  iron: new THREE.MeshStandardMaterial({ color: 0x2c3632, metalness: 0.55, roughness: 0.55 }),
+  stone: new THREE.MeshPhysicalMaterial({ color: 0x3a3a3a, roughness: 1, metalness: 0, clearcoat: 0.4, clearcoatRoughness: 0.05, envMapIntensity: 1.1 }),   // polished dark marble bar top (Marble016)
+  laminate: new THREE.MeshStandardMaterial({ color: 0xcdc7bd, roughness: 1 }),                       // satin laminate (Plastic013A)
+  hallWall: new THREE.MeshStandardMaterial({ color: 0xcfc5b3, roughness: 1.4 }),                     // painted plaster of the hall (beige_wall_001, 3 m tile)
+  iron: new THREE.MeshStandardMaterial({ color: 0x2c3632, metalness: 0, roughness: 1.1 }),           // green-painted cast iron (green_metal_rust): paint = dielectric
   daylight: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xe6eef5, emissiveIntensity: 1.8, roughness: 1 }),
-  glassRoof: new THREE.MeshStandardMaterial({ color: 0x5f6a74, emissive: 0x9fb0c0, emissiveIntensity: 0.42, roughness: 1, side: THREE.DoubleSide }),
-  crate: new THREE.MeshStandardMaterial({ color: 0x9a7b55, roughness: 0.85 }),
-  tilesFloor: new THREE.MeshStandardMaterial({ map: T.floor(5.283 / 1.2, 2.734 / 1.2), roughness: 0.55, metalness: 0.05, envMapIntensity: 0.8 }),
-  hallFloor: new THREE.MeshStandardMaterial({ color: 0xa8a299, roughness: 0.85 }),
-  metroS: new THREE.MeshStandardMaterial({ map: T.metro(4.933 / 0.3, 1.8 / 0.15), roughnessMap: T.metroR(4.933 / 0.3, 1.8 / 0.15), bumpMap: T.metroR(4.933 / 0.3, 1.8 / 0.15), bumpScale: -0.006, roughness: 1, metalness: 0.02 }),
-  metroW: new THREE.MeshStandardMaterial({ map: T.metro(2.184 / 0.3, 1.8 / 0.15), roughnessMap: T.metroR(2.184 / 0.3, 1.8 / 0.15), bumpMap: T.metroR(2.184 / 0.3, 1.8 / 0.15), bumpScale: -0.006, roughness: 1, metalness: 0.02 }),
-  woodN: new THREE.MeshStandardMaterial({ map: T.wood(5.283, 1.05), roughness: 0.55 }),
-  woodE: new THREE.MeshStandardMaterial({ map: T.wood(1.5, 1.05), roughness: 0.55 }),
+  glassRoof: new THREE.MeshStandardMaterial({ color: 0xb9c0c5, emissive: 0xe8ecee, emissiveIntensity: 0.75, roughness: 1, side: THREE.DoubleSide }),
+  crate: new THREE.MeshStandardMaterial({ color: 0x9a7b55, roughness: 2 }),                          // raw poplar slats (Wood061)
+  tilesFloor: new THREE.MeshStandardMaterial({ color: 0xa9a9a6, roughness: 1, envMapIntensity: 0.9 }),   // light-grey porcelain 60 × 60, satin (procedural)
+  hallFloor: new THREE.MeshStandardMaterial({ color: 0xa8a299, roughness: 1.2 }),                    // worn limestone slabs of the hall (floor_tiles_02, 4 m tile)
+  metro: new THREE.MeshStandardMaterial({ color: 0xeeeeea, roughness: 1, envMapIntensity: 1 }),     // white glazed metro 10 × 20, running bond, grey grout (procedural)
+  woodN: new THREE.MeshStandardMaterial({ color: 0x9a7350, roughness: 0.7 }),                         // varnished oak boards, vertical (oak_wood_planks)
 };
-M.stoneE = M.stone.clone();                       // east bar top (other orientation)
-M.hood = M.inox.clone(); M.hood.envMapIntensity = 0.4; M.hood.color.set(0xb9bdc1); M.hood.roughness = 0.9; M.hood.anisotropy = 0.2;   // hood canopy: large flat panel, reads mid-grey like in the reference renders
+M.stoneE = M.stone; M.woodE = M.woodN; M.metroS = M.metroW = M.metro;   // world-scale UVs: one material per finish, whatever the size or orientation of the part
+M.hood = M.inox.clone(); M.hood.envMapIntensity = 1.0; M.hood.color.set(0xb8b7b4); M.hood.roughness = 0.75; M.hood.anisotropy = 0.2;   // hood canopy: big flat panel right above the PointLights → rougher so the highlights stay soft
+M.board = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 1.3 });                                                       // white PE cutting board (Plastic013B, knife marks)
 M.chrome = new THREE.MeshStandardMaterial({ color: 0xe6e9ec, metalness: 1, roughness: 0.14 });                                     // polished parts: knob bezels, handles, taps
-M.glassBlack = new THREE.MeshPhysicalMaterial({ color: 0x0a0c0f, metalness: 0.5, roughness: 0.06, envMapIntensity: 1.2 });          // oven door glass (opaque, mirror-dark)
+M.glassBlack = new THREE.MeshPhysicalMaterial({ color: 0x0a0c0f, metalness: 0.5, roughness: 1, envMapIntensity: 1.2 });             // oven door + hob glass (opaque, mirror-dark; fingerprints in the roughness map)
 M.panel = new THREE.MeshStandardMaterial({ color: 0x25282b, metalness: 0.6, roughness: 0.5 });                                      // control panels (dark steel)
 M.oil = new THREE.MeshPhysicalMaterial({ color: 0xb07a1e, metalness: 0, roughness: 0.02, clearcoat: 1, envMapIntensity: 1.6 });                           // fryer oil
 M.pilotG = new THREE.MeshStandardMaterial({ color: 0x1a3a1a, emissive: 0x36ff4a, emissiveIntensity: 2 });
@@ -264,7 +277,7 @@ const digits = (txt, col, bg = '#140000') => new THREE.MeshBasicMaterial({ map: 
 M.tempR = digits('+3.0', '#ff3a26'); M.tempF = digits('180', '#ff3a26'); M.tempB = digits('+4', '#5fb8ff', '#06101a');
 M.clock = digits('12:30', '#ffa21e', '#140800'); M.redBtn = new THREE.MeshStandardMaterial({ color: 0xd42020, emissive: 0x3a0000, roughness: 0.35 }); M.ceramic = new THREE.MeshStandardMaterial({ color: 0xf4f2ee, roughness: 0.22 });
 M.grille = new THREE.MeshStandardMaterial({ map: mkTex(256, 64, (g, w, h) => { g.fillStyle = '#121416'; g.fillRect(0, 0, w, h); g.fillStyle = '#a3a8ac'; for (let x = 0; x < w; x += 16) g.fillRect(x + 3, 0, 7, h); }, 6, 1), metalness: 0.85, roughness: 0.4 });   // espresso drip-tray grille
-M.inoxMach = M.inoxDoor.clone(); M.inoxMach.roughness = 0.5; M.inoxMach.envMapIntensity = 0.65;   // espresso machine body: brushed but matte (big flat face under the pendants)
+M.inoxMach = M.inoxDoor.clone(); M.inoxMach.roughness = 0.6; M.inoxMach.envMapIntensity = 0.95; M.inoxMach.anisotropy = 0.15;   // espresso machine body: brushed but matte (big flat face under the pendants)
 // bottles for the back-bar fridge: [body, label colour, cap colour] — water, white wine, red wine, beer, orange juice, cola
 const bottleKinds = [
   [new THREE.MeshPhysicalMaterial({ color: 0xd6ecf7, transparent: true, opacity: 0.55, roughness: 0.08 }), 0x2f7fd6, 0x2f7fd6],
@@ -274,28 +287,84 @@ const bottleKinds = [
   [new THREE.MeshStandardMaterial({ color: 0xe8862a, roughness: 0.3 }), 0xf4d35e, 0xffffff],
   [new THREE.MeshPhysicalMaterial({ color: 0x1a0d0a, roughness: 0.1 }), 0xc8102e, 0xc8102e],
 ].map(([body, lab, cap]) => ({ body, lab: new THREE.MeshStandardMaterial({ color: lab, roughness: 0.6 }), cap: new THREE.MeshStandardMaterial({ color: cap, roughness: 0.35, metalness: 0.3 }) }));
-{ // real PBR maps swapped in when they arrive (repeat = surface size / real size of one tile of texture)
-  const NS = s => ({ normalScale: new THREE.Vector2(s, s) }), C = c => ({ color: new THREE.Color(c) });
-  const mS = [4.933 / 1.5, 1.5], mW = [2.184 / 1.5, 1.5], sN = [5.583 / 0.35, 1], sE = [1, 1.696 / 0.3], wN = [5.283, 2.1], wE = [1.5, 2.1], fH = [12.5, 12.5], fS = [5.283 / 2.4, 2.734 / 2.4];
-  apply('metro_c.jpg', true, [[M.metroS, 'map', ...mS, C(0xd8d6d0)], [M.metroW, 'map', ...mW, C(0xd8d6d0)]]);
-  apply('metro_r.jpg', false, [[M.metroS, 'roughnessMap', ...mS, { roughness: 1 }], [M.metroW, 'roughnessMap', ...mW, { roughness: 1 }]]);
-  apply('metro_n.jpg', false, [[M.metroS, 'normalMap', ...mS, { bumpMap: null, ...NS(0.7) }], [M.metroW, 'normalMap', ...mW, { bumpMap: null, ...NS(0.7) }]]);
-  apply('granite_c.jpg', true, [[M.stone, 'map', ...sN, C(0xd2cec9)], [M.stoneE, 'map', ...sE, C(0xd2cec9)]]);
-  apply('granite_r.jpg', false, [[M.stone, 'roughnessMap', ...sN, { roughness: 2.6 }], [M.stoneE, 'roughnessMap', ...sE, { roughness: 2.6 }]]);
-  apply('granite_n.jpg', false, [[M.stone, 'normalMap', ...sN, NS(0.35)], [M.stoneE, 'normalMap', ...sE, NS(0.35)]]);
-  apply('wood_c.jpg', true, [[M.woodN, 'map', ...wN], [M.woodE, 'map', ...wE]]);
-  apply('wood_r.jpg', false, [[M.woodN, 'roughnessMap', ...wN, { roughness: 1.4 }], [M.woodE, 'roughnessMap', ...wE, { roughness: 1.4 }]]);
-  apply('wood_n.jpg', false, [[M.woodN, 'normalMap', ...wN, NS(0.6)], [M.woodE, 'normalMap', ...wE, NS(0.6)]]);
-  apply('floor_c.jpg', true, [[M.hallFloor, 'map', ...fH, C(0xaea89e)], [M.tilesFloor, 'map', ...fS, C(0x84888c)]]);
-  apply('floor_r.jpg', false, [[M.hallFloor, 'roughnessMap', ...fH, { roughness: 1.1 }], [M.tilesFloor, 'roughnessMap', ...fS, { roughness: 0.7 }]]);
-  apply('floor_n.jpg', false, [[M.hallFloor, 'normalMap', ...fH, NS(0.5)], [M.tilesFloor, 'normalMap', ...fS, NS(0.5)]]);
-  apply('metal_c.jpg', true, [[M.inox, 'map', 2, 2, C(0xe8ebee)], [M.inoxDoor, 'map', 3, 1.5, C(0xdfe2e5)], [M.inoxMach, 'map', 3, 1.5, C(0xdfe2e5)], [M.inoxDark, 'map', 2, 2, C(0x8f949a)], [M.hood, 'map', 2, 2, C(0xcfd3d7)]]);
-  // stainless roughness = brushed streaks + the real scratches/smudges of the metal (added in a canvas)
-  loadTex('metal_r.jpg', false, t => {
-    const mk = (base, rx, ry) => mkTex(1024, 1024, (g, w, h) => { g.drawImage(base.image, 0, 0, w, h); g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.9; g.drawImage(t.image, 0, 0, w, h); }, rx, ry, true);
-    upd(M.inox, { roughnessMap: mk(brushA, 2, 2), roughness: 0.28 }); upd(M.inoxDoor, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.24 }); upd(M.inoxMach, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.42 }); upd(M.inoxDark, { roughnessMap: mk(brushB, 3, 1.5), roughness: 0.4 }); upd(M.hood, { roughnessMap: mk(brushA, 2, 2), roughness: 0.9 });   // matte enough that the pendant highlights stay soft on the big panel
-  });
+{ // V9 materials: maps arrive asynchronously (the LoadingManager then calls captureEnv, so the reflections see the final materials)
+  pbr('inox', 0.5, [[M.inox, {}, 0.8], [M.inoxDoor, {}, 0.8], [M.inoxMach, {}, 0.3], [M.inoxDark, {}, 0.35], [M.hood, {}, 0.3]], { c: false });   // no albedo map: brushed steel reads through the roughness and normal grain + anisotropy (a colour map made it look like concrete)
+  M.plancha = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.6, 0.6, 0.61), metalness: 1, roughness: 0.3 });   // plancha plate + slicer blade: bright polished steel (references); marks come from the wear shader
+  pbr('marble', 1.8, [[M.stone, { color: Cx(0xd8d8d8) }]], { n: false });   // larger veins; its normal map is flat
+  pbr('oak', 1.2, [[M.woodN, { color: Cx(0xeeeef4) }]], { n: false, rot: Math.PI / 2 });        // boards run along U in the image → turned vertical
+  pbr('lam', 0.45, [[M.laminate, { color: Cx(0xdcd6cc) }, 0.2]]);
+  pbr('board', 0.4, [[M.board, {}, 0.6]], { rot: 0.5 });
+  pbr('crate', 0.4, [[M.crate, { color: Cx(0xf2ebe2) }, 0.8]]);
+  pbr('iron', 1.0, [[M.iron, { color: Cx(0xb0b8b0) }]], { n: false });
+  pbr('hwall', 3.0, [[M.hallWall, {}, 0.6]], { c: false });   // colour map too orange: plain cream + plaster relief
+  pbr('hfloor', 4.0, [[M.hallFloor, { color: Cx(0xd0d8e4) }, 0.8]]);
+  pbr('sol', 1.2, [[M.tilesFloor, { color: Cx(0xffffff) }]]);
+  pbr('metro', 0.8, [[M.metro, { color: Cx(0xffffff) }, 2.5]]);   // normal × 2.5: pillowed glaze edges catch the light
+  pbr('plast', 0.3, [[M.black]], { c: false });
+  pbr('hob', 0.3, [[M.glassBlack]], { c: false, n: false }); M.glassBlack.roughness = 0.45;   // halves the fingerprint map: clean glass, faint prints
 }
+// ---------- Wear: fingerprints, wipe smears, scratches, dust on tops, dirt at floor level, grease around the cooking line, large-scale variation ----------
+// The masks are projected in world space along the dominant axis of the surface: they need no UVs and never repeat in step with the material maps.
+const wearU = { tImp: { value: null }, tDust: { value: null } };   // imp = R fingerprints, G wipe smears, B scratches · dust = R dust specks, G floor grunge
+tex9('imp', 'c', 1, 0, t => { wearU.tImp.value = t; }); tex9('dust', 'c', 1, 0, t => { wearU.tDust.value = t; });
+const WEAR_FN = `varying vec3 vWP;
+uniform sampler2D tImp, tDust;
+uniform vec4 uW1, uW2;
+float wH(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+float wN(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(wH(i), wH(i + vec3(1.0, 0.0, 0.0)), f.x), mix(wH(i + vec3(0.0, 1.0, 0.0)), wH(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+             mix(mix(wH(i + vec3(0.0, 0.0, 1.0)), wH(i + vec3(1.0, 0.0, 1.0)), f.x), mix(wH(i + vec3(0.0, 1.0, 1.0)), wH(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z); }
+`;
+const WEAR_MAIN = `{
+  vec3 gN = normalize((vec4(vNormal, 0.0) * viewMatrix).xyz), aN = abs(gN);
+  vec2 wuv = aN.y > max(aN.x, aN.z) ? vWP.xz : (aN.x > aN.z ? vWP.zy : vWP.xy);
+  float vert = 1.0 - aN.y, nz = wN(vWP * 9.0) * 0.6 + wN(vWP * 31.0) * 0.4, rAdd = 0.0;
+  if (uW1.x + uW1.y + uW1.z > 0.0) {
+    vec3 im = vec3(texture2D(tImp, wuv * 2.0 + 0.13).r, texture2D(tImp, wuv * 2.7 + vec2(0.41, 0.77)).g, texture2D(tImp, wuv * 2.0 + vec2(0.7, 0.29)).b);
+    float reach = smoothstep(0.45, 0.8, vWP.y) * (1.0 - smoothstep(1.55, 1.85, vWP.y));   // hands touch fronts between 0.5 and 1.8 m
+    float clu = smoothstep(0.55, 0.85, wN(vWP * 1.3 + 7.0)), wipe = smoothstep(0.3, 0.8, wN(vWP * 0.9 + 3.0));   // prints come in clusters (handles, edges), wipes in patches
+    rAdd += uW1.x * smoothstep(0.25, 0.55, im.r) * clu * mix(1.0, reach, vert) + uW1.y * im.g * wipe + uW1.z * clamp(im.b * 1.8, 0.0, 1.0) * (1.0 - 0.6 * vert);
+  }
+  if (uW1.w + uW2.w > 0.0) {
+    float du = smoothstep(0.25, 0.7, texture2D(tDust, wuv / 0.65).r) * smoothstep(0.7, 0.95, gN.y) * uW1.w;
+    float gr = clamp(texture2D(tDust, wuv / 3.7).g * texture2D(tDust, mat2(0.8, 0.6, -0.6, 0.8) * wuv / 9.1 + 0.37).g * 3.0, 0.0, 1.0) * uW2.w;
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.45, 0.43, 0.40), du * 0.6) * (1.0 - 0.5 * gr);
+    rAdd += du * 0.5 + gr * 0.35;
+  }
+  float low = (1.0 - smoothstep(0.02, 0.2, vWP.y)) * uW2.x * (0.4 + 0.6 * nz);   // kick zone: shoes, mop splashes
+  vec3 gq = smoothstep(vec3(0.55, 0.8, 1.35), vec3(0.85, 1.0, 1.6), vWP) * (1.0 - smoothstep(vec3(2.25, 2.05, 2.3), vec3(2.55, 2.35, 2.5), vWP));   // cooking line under the hood
+  float grease = gq.x * gq.y * gq.z * uW2.y * nz, mac = (wN(vWP * 0.8) + wN(vWP * 2.3) * 0.5) / 1.5 - 0.5;
+  diffuseColor.rgb *= (1.0 - 0.45 * low) * mix(vec3(1.0), vec3(0.96, 0.92, 0.84), grease) * (1.0 + uW2.z * mac * 2.0);
+  roughnessFactor = clamp(mix(roughnessFactor, 0.22, grease * 0.6) + rAdd + 0.3 * low + uW2.z * mac, 0.02, 1.0);
+}
+`;
+function wear(m, k) {   // k = [fingerprints, smears, scratches, dust on tops, dirt at floor level, grease, macro variation, floor grunge]
+  const w1 = new THREE.Vector4(k[0], k[1], k[2], k[3]), w2 = new THREE.Vector4(k[4], k[5], k[6], k[7]);
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, wearU, { uW1: { value: w1 }, uW2: { value: w2 } });
+    sh.vertexShader = 'varying vec3 vWP;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n{ vec4 wq = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\n wq = instanceMatrix * wq;\n#endif\n vWP = (modelMatrix * wq).xyz; }');
+    sh.fragmentShader = WEAR_FN + sh.fragmentShader.replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + WEAR_MAIN);
+  };
+  m.customProgramCacheKey = () => 'wear9'; m.userData.wear = { w1, w2 }; m.needsUpdate = true;
+}
+wear(M.inox, [0.1, 0.1, 0.12, 0, 0.25, 0.5, 0.04, 0]); wear(M.inoxDoor, [0.1, 0.08, 0.04, 0, 0.3, 0.3, 0.03, 0]); wear(M.inoxMach, [0.08, 0.08, 0.02, 0, 0, 0.2, 0.03, 0]);
+wear(M.inoxDark, [0.06, 0.05, 0.05, 0, 0.2, 0.3, 0.03, 0]); wear(M.hood, [0.04, 0.06, 0, 0.3, 0, 0.6, 0.05, 0]); wear(M.plate, [0, 0.05, 0.1, 0, 0, 0.4, 0.06, 0]); wear(M.plancha, [0, 0.05, 0.1, 0, 0, 0.4, 0.06, 0]);
+wear(M.stone, [0.06, 0.06, 0.05, 0, 0, 0, 0.04, 0]); wear(M.glassBlack, [0.1, 0.05, 0, 0, 0, 0, 0, 0]); wear(M.metro, [0, 0.03, 0, 0, 0.15, 0.6, 0.015, 0]);
+wear(M.tilesFloor, [0, 0, 0, 0, 0, 0, 0.05, 0.25]); wear(M.hallFloor, [0, 0, 0, 0, 0, 0, 0.08, 0.4]); wear(M.laminate, [0.08, 0.06, 0.06, 0, 0.2, 0, 0.03, 0]);
+wear(M.woodN, [0, 0, 0, 0, 0.35, 0, 0.05, 0]); wear(M.hallWall, [0, 0, 0, 0, 0.3, 0, 0.1, 0]); wear(M.iron, [0, 0, 0, 0.2, 0.2, 0, 0.08, 0]);
+// UVs in metres. Box face order +x −x +y −y +z −z (BoxGeometry and the non-indexed RoundedBoxGeometry): u/v axes and signs of BoxGeometry, origin = world (or group) frame,
+// so neighbouring boxes continue the same texture and a brushed grain runs along U (horizontal on every vertical face).
+function worldUV(g, cx, cy, cz) {
+  const p = g.attributes.position, uv = g.attributes.uv, n = p.count / 6, c = [cx, cy, cz], F = [[2, -1, 1, 1], [2, 1, 1, 1], [0, 1, 2, -1], [0, 1, 2, 1], [0, 1, 1, 1], [0, -1, 1, 1]];
+  for (let i = 0; i < p.count; i++) { const [ua, us, va, vs] = F[Math.floor(i / n)]; uv.setXY(i, us * (p.getComponent(i, ua) + c[ua]), vs * (p.getComponent(i, va) + c[va])); }
+  uv.needsUpdate = true; return g;
+}
+function cylUV(g, r, h) {   // side: u × circumference, v × height · caps: × diameter
+  const uv = g.attributes.uv, side = (g.parameters.radialSegments + 1) * (g.parameters.heightSegments + 1);
+  for (let i = 0; i < uv.count; i++) { const s = i < side; uv.setXY(i, uv.getX(i) * (s ? 2 * Math.PI * r : 2 * r), uv.getY(i) * (s ? h : 2 * r)); }
+  uv.needsUpdate = true; return g;
+}
+const planeUV = (g, w, h) => { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w, uv.getY(i) * h); uv.needsUpdate = true; return g; };
 
 // ---------- Builders ----------
 const obstacles = [];
@@ -303,12 +372,15 @@ const addObs = (x0, z0, x1, z1) => obstacles.push({ x0, z0, x1, z1 });
 const ROUNDED = new Set([M.inox, M.inoxDoor, M.inoxMach, M.inoxDark, M.plate, M.alu, M.hood]);   // sheet-metal boxes get a small bevel (catches the light)
 function B(x, y, z, w, h, d, mat, obs) {        // box from its min corner
   const r = ROUNDED.has(mat) ? Math.min(0.007, w / 4, h / 4, d / 4) : 0;
-  const m = new THREE.Mesh(r > 0 ? new RoundedBoxGeometry(w, h, d, 2, r) : new THREE.BoxGeometry(w, h, d), mat);
+  const g = r > 0 ? new RoundedBoxGeometry(w, h, d, 2, r) : new THREE.BoxGeometry(w, h, d);
+  if (WUV.has(mat)) worldUV(g, x + w / 2, y + h / 2, z + d / 2);
+  const m = new THREE.Mesh(g, mat);
   m.position.set(x + w / 2, y + h / 2, z + d / 2); m.castShadow = m.receiveShadow = true; scene.add(m);
   if (obs) addObs(x, z, x + w, z + d); return m;
 }
 function Cyl(cx, cy, cz, r, h, mat, axis) {     // cylinder from its centre
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 24), mat);
+  const g = new THREE.CylinderGeometry(r, r, h, 24); if (WUV.has(mat)) cylUV(g, r, h);
+  const m = new THREE.Mesh(g, mat);
   if (axis === 'x') m.rotation.z = Math.PI / 2; if (axis === 'z') m.rotation.x = Math.PI / 2;
   m.position.set(cx, cy, cz); m.castShadow = m.receiveShadow = true; scene.add(m); return m;
 }
@@ -359,7 +431,7 @@ const L = (code, name, x, y, z, exist) => labels.push({ code, name, x, y, z, exi
 const hallG = new THREE.Group(), _hall0 = scene.children.length;   // everything built in this block is moved into hallG below (hidden in AR and in the USDZ export)
 {
   const X0 = -20, X1 = 25, Z0 = -12, Z1 = 14, H = 6.8;        // hall interior, metres
-  const hf = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), M.hallFloor); hf.rotation.x = -Math.PI / 2; hf.position.set(2.4, -0.002, 1); hf.receiveShadow = true; scene.add(hf);
+  const hf = new THREE.Mesh(planeUV(new THREE.PlaneGeometry(60, 60), 60, 60), M.hallFloor); hf.rotation.x = -Math.PI / 2; hf.position.set(2.4, -0.002, 1); hf.receiveShadow = true; scene.add(hf);
   const roof = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, Z1 - Z0), M.glassRoof); roof.rotation.x = Math.PI / 2; roof.position.set((X0 + X1) / 2, H, (Z0 + Z1) / 2); roof.userData.ceiling = true; scene.add(roof);
   B(X0 - 0.3, 0, Z0 - 0.3, X1 - X0 + 0.6, H, 0.3, M.hallWall); B(X0 - 0.3, 0, Z1, X1 - X0 + 0.6, H, 0.3, M.hallWall);
   B(X0 - 0.3, 0, Z0, 0.3, H, Z1 - Z0, M.hallWall); B(X1, 0, Z0, 0.3, H, Z1 - Z0, M.hallWall);
@@ -367,7 +439,7 @@ const hallG = new THREE.Group(), _hall0 = scene.children.length;   // everything
     const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rotY; scene.add(g);
     const pane = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.5), M.daylight); pane.position.set(0, 2.85, 0.006); g.add(pane);
     const top = new THREE.Mesh(new THREE.CircleGeometry(1.1, 24, 0, Math.PI), M.daylight); top.position.set(0, 4.1, 0.006); g.add(top);
-    const bar = (w, h, px, py) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), M.iron); m.position.set(px, py, 0.03); g.add(m); };
+    const bar = (w, h, px, py) => { const m = new THREE.Mesh(worldUV(new THREE.BoxGeometry(w, h, 0.05), px, py, 0.03), M.iron); m.position.set(px, py, 0.03); g.add(m); };
     bar(0.05, 3.5, -0.37, 3.35); bar(0.05, 3.5, 0.37, 3.35); bar(2.2, 0.06, 0, 4.1); bar(2.2, 0.06, 0, 2.85); bar(2.6, 0.1, 0, 1.58);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(1.13, 0.045, 6, 24, Math.PI), M.iron); ring.position.set(0, 4.1, 0.03); g.add(ring);
   }
@@ -405,11 +477,11 @@ scene.children.slice(_hall0).forEach(o => hallG.add(o)); scene.add(hallG);   // 
 // ---------- Stand shell ----------
 const W = 4.933, D = 2.184;                      // interior, metres
 {
-  const fl = new THREE.Mesh(new THREE.PlaneGeometry(5.283, 2.734), M.tilesFloor); fl.rotation.x = -Math.PI / 2; fl.position.set(2.4415, 0.001, 1.017); fl.receiveShadow = true; scene.add(fl);
+  const fl = new THREE.Mesh(planeUV(new THREE.PlaneGeometry(5.283, 2.734), 5.283, 2.734), M.tilesFloor); fl.rotation.x = -Math.PI / 2; fl.position.set(2.4415, 0.001, 1.017); fl.receiveShadow = true; scene.add(fl);
   B(-0.2, 0, -0.35, 0.2, 2.7, 2.734, M.paint, true);                  // west wall
   B(-0.2, 0, D, 5.283, 2.7, 0.2, M.paint, true);                      // south wall (back)
-  const tw = new THREE.Mesh(new THREE.PlaneGeometry(D, 1.8), M.metroW); tw.rotation.y = Math.PI / 2; tw.position.set(0.002, 0.9, D / 2); tw.receiveShadow = true; scene.add(tw);
-  const ts = new THREE.Mesh(new THREE.PlaneGeometry(W, 1.8), M.metroS); ts.rotation.y = Math.PI; ts.position.set(W / 2, 0.9, D - 0.002); ts.receiveShadow = true; scene.add(ts);
+  const tw = new THREE.Mesh(planeUV(new THREE.PlaneGeometry(D, 1.8), D, 1.8), M.metroW); tw.rotation.y = Math.PI / 2; tw.position.set(0.002, 0.9, D / 2); tw.receiveShadow = true; scene.add(tw);
+  const ts = new THREE.Mesh(planeUV(new THREE.PlaneGeometry(W, 1.8), W, 1.8), M.metroS); ts.rotation.y = Math.PI; ts.position.set(W / 2, 0.9, D - 0.002); ts.receiveShadow = true; scene.add(ts);
   // bar on the north and east sides (customer side), with an overhanging top
   B(-0.2, 0, -0.15, 5.283, 1.05, 0.15, M.woodN, true);
   B(W, 0, -0.15, 0.15, 1.05, 1.496, M.woodE, true);
@@ -466,7 +538,7 @@ const W = 4.933, D = 2.184;                      // interior, metres
   // C08 plancha, C07 neutral, C06 fryer (700 series tops)
   B(0.70, 0.60, 1.49, 1.60, 0.27, 0.694, M.plate);                   // dark backing = seams between the three 700-series modules
   for (const x of [0.70, 1.10, 1.50, 1.90]) { B(x + 0.003, 0.60, 1.484, 0.394, 0.27, 0.70, M.inox); Cyl(x + 0.2, 0.861, 1.493, 0.009, 0.394, M.inox, 'x'); }   // modules with a rolled front edge
-  B(1.13, 0.87, 1.60, 0.34, 0.012, 0.50, M.plate); B(1.13, 0.875, 1.50, 0.34, 0.012, 0.09, M.plate);
+  B(1.13, 0.87, 1.60, 0.34, 0.012, 0.50, M.plancha); B(1.13, 0.875, 1.50, 0.34, 0.012, 0.09, M.plancha);
   B(1.13, 0.88, 2.09, 0.34, 0.07, 0.015, M.inox); B(1.13, 0.88, 1.60, 0.012, 0.07, 0.50, M.inox); B(1.458, 0.88, 1.60, 0.012, 0.07, 0.50, M.inox);   // splash guards
   B(1.103, 0.62, 1.47, 0.394, 0.10, 0.015, M.panel); dial(1.17, 0.67, 1.47); dial(1.26, 0.67, 1.47); Cyl(1.33, 0.67, 1.468, 0.005, 0.004, M.pilotO, 'z');
   B(1.37, 0.63, 1.462, 0.11, 0.08, 0.01, M.inoxDoor); B(1.38, 0.69, 1.458, 0.09, 0.006, 0.006, M.black);   // grease drawer
@@ -487,7 +559,7 @@ const W = 4.933, D = 2.184;                      // interior, metres
     Cyl(x, 1.57 + h / 2, 2.02, r, h, M.inoxDoor); Cyl(x, 1.577 + h, 2.02, r + 0.006, 0.014, M.inoxDoor); Cyl(x, 1.59 + h, 2.02, 0.012, 0.03, M.black);
     B(x - r - 0.035, 1.57 + h - 0.03, 2.01, 0.04, 0.02, 0.02, M.inoxDark); B(x + r, 1.57 + h - 0.03, 2.01, 0.04, 0.02, 0.02, M.inoxDark);
   }
-  B(1.52, 0.87, 1.50, 0.36, 0.018, 0.24, M.white); B(1.53, 0.87, 1.79, 0.165, 0.10, 0.325, M.inoxDoor); B(1.715, 0.87, 1.79, 0.165, 0.10, 0.325, M.inoxDoor);   // cutting board + 2 GN 1/3 on the neutral
+  B(1.52, 0.87, 1.50, 0.36, 0.018, 0.24, M.board); B(1.53, 0.87, 1.79, 0.165, 0.10, 0.325, M.inoxDoor); B(1.715, 0.87, 1.79, 0.165, 0.10, 0.325, M.inoxDoor);   // cutting board + 2 GN 1/3 on the neutral
   B(1.45, 0.0005, 0.95, 0.30, 0.004, 0.30, M.plate); for (let k = 0; k < 5; k++) B(1.47 + k * 0.06, 0.0045, 0.95, 0.015, 0.003, 0.30, M.inoxDark);   // floor drain grate
   L('C12', 'Étagère barreaudée 1 niveau', 1.30, 1.85, 2.0);
   // C21 hood
@@ -505,13 +577,13 @@ const W = 4.933, D = 2.184;                      // interior, metres
   // V8.5 : comptoir blanc existant de 2,30 à 4,27 m (vue 3D du PDF : plan blanc continu au-dessus de C05/C04 et de C01, joue pleine à l'extrémité est, pas de dosseret)
   B(2.30, 0.86, 1.584, 1.974, 0.04, 0.60, M.laminate, true); B(4.234, 0, 1.584, 0.04, 0.86, 0.60, M.laminate, true); B(2.30, 0, 1.60, 0.03, 0.86, 0.03, M.inoxDark); B(2.30, 0, 2.15, 0.03, 0.86, 0.03, M.inoxDark);
   B(2.40, 0.90, 1.70, 0.32, 0.08, 0.40, M.alu); B(2.42, 0.98, 1.73, 0.22, 0.03, 0.30, M.inox); B(2.44, 0.98, 1.95, 0.18, 0.14, 0.14, M.alu);
-  Cyl(2.67, 1.11, 1.88, 0.14, 0.012, M.plate, 'x'); B(2.60, 1.10, 1.74, 0.06, 0.03, 0.12, M.inoxDark); B(2.42, 1.01, 1.70, 0.03, 0.03, 0.10, M.black);
+  Cyl(2.67, 1.11, 1.88, 0.14, 0.012, M.plancha, 'x'); B(2.60, 1.10, 1.74, 0.06, 0.03, 0.12, M.inoxDark); B(2.42, 1.01, 1.70, 0.03, 0.03, 0.10, M.black);
   { const r = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.008, 8, 40), M.inoxDark); r.rotation.y = Math.PI / 2; r.position.set(2.675, 1.11, 1.88); r.castShadow = true; scene.add(r); }   // blade guard
   L('C04', 'Trancheuse', 2.56, 1.45, 1.90, true);
   const sh = new THREE.Group(); sh.position.set(2.60, 1.48, D); sh.rotation.x = -0.32; scene.add(sh);
-  const shb = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.025, 0.35), M.inox); shb.position.set(0, 0, -0.175); shb.castShadow = true; sh.add(shb);
-  for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.165, 0.09, 0.30), M.inoxDark); p.position.set(-0.185 + i * 0.185, 0.058, -0.175); p.castShadow = true; sh.add(p); }
-  const lip = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.05, 0.02), M.inox); lip.position.set(0, 0.02, -0.35); sh.add(lip);
+  const shb = new THREE.Mesh(worldUV(new THREE.BoxGeometry(0.56, 0.025, 0.35), 0, 0, -0.175), M.inox); shb.position.set(0, 0, -0.175); shb.castShadow = true; sh.add(shb);   // UVs in metres, group frame
+  for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(worldUV(new THREE.BoxGeometry(0.165, 0.09, 0.30), -0.185 + i * 0.185, 0.058, -0.175), M.inoxDark); p.position.set(-0.185 + i * 0.185, 0.058, -0.175); p.castShadow = true; sh.add(p); }
+  const lip = new THREE.Mesh(worldUV(new THREE.BoxGeometry(0.56, 0.05, 0.02), 0, 0.02, -0.35), M.inox); lip.position.set(0, 0.02, -0.35); sh.add(lip);
   for (const x of [-0.24, 0.24]) B(2.60 + x - 0.015, 1.30, 2.05, 0.03, 0.18, 0.13, M.inoxDark);
   // V8.5 : C03 x 2 (devis : 2 étagères 300 x 600) = la vue 3D du PDF montre une étagère plate au-dessus de l'inclinée à bacs GN
   B(2.30, 1.85, D - 0.30, 0.60, 0.025, 0.30, M.inox); for (const x of [2.36, 2.815]) { B(x, 1.825, D - 0.28, 0.025, 0.025, 0.28, M.inoxDark); B(x, 1.67, D - 0.03, 0.025, 0.18, 0.03, M.inoxDark); }
@@ -841,9 +913,20 @@ async function buildUSDZ() {
   const offs = [hallG, labelGroup, ...people];
   scene.traverse(o => { if (o.isInstancedMesh) offs.push(o); });        // the exporter ignores instances (would leave 1 bottle / 1 cup at the origin)
   const vis = offs.map(o => o.visible); offs.forEach(o => o.visible = false);
-  try { return await new USDZExporter().parseAsync(scene, { quickLookCompatible: true, maxTextureSize: 1024 }); }
-  finally { offs.forEach((o, i) => o.visible = vis[i]); }
+  // USDZExporter r165 only links a roughness map when roughness === 1 and ignores normalScale: bake factor × mean of the ORM green channel
+  // (measured on the 1K maps) and drop the weak normal maps. The USD text is built synchronously inside parseAsync, so everything is
+  // restored right after the call, before the first await (the render loop never draws, nor compiles, the export state).
+  const sv = [...WUV].map(m => [m, m.roughness, m.roughnessMap, m.normalMap]);
+  for (const m of WUV) {
+    if (m.roughnessMap && m.roughness !== 1) { m.roughness = Math.min(1, m.roughness * (USDZ_G.get(m) ?? 0.45)); m.roughnessMap = null; }
+    if (m.normalMap && m.normalScale.x < 0.5) m.normalMap = null;
+  }
+  let p;
+  try { p = new USDZExporter().parseAsync(scene, { quickLookCompatible: true, maxTextureSize: 512 }); }   // 512: textures are PNG in the USDZ (1024 = 47 MB)
+  finally { sv.forEach(([m, r, rm, nm]) => { m.roughness = r; m.roughnessMap = rm; m.normalMap = nm; }); offs.forEach((o, i) => o.visible = vis[i]); }
+  return await p;
 }
+const USDZ_G = new Map([[M.inox, 0.471], [M.inoxDoor, 0.471], [M.inoxMach, 0.471], [M.inoxDark, 0.471], [M.hood, 0.471], [M.woodN, 0.443], [M.board, 0.456], [M.glassBlack, 0.041]]);
 // ---------- Installation comme application (V8.3, GitHub Pages seulement : site/manifest.webmanifest + site/sw.js + icônes) ----------
 const onPages = /github\.io$/.test(location.hostname), standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
 if ('serviceWorker' in navigator && onPages) navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -867,7 +950,8 @@ $('b-usdz').addEventListener('click', async e => {
 
 // ---------- Loop ----------
 const clock = new THREE.Clock(); const vdir = new THREE.Vector3();
-function resize() { const w = innerWidth, h = innerHeight; if (canvas.width !== Math.floor(w * renderer.getPixelRatio()) || canvas.height !== Math.floor(h * renderer.getPixelRatio())) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); if (composer) { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); } } }
+let snapSize = null;   // DBG.snap: render at a fixed size for comparisons
+function resize() { const w = snapSize ? snapSize[0] : innerWidth, h = snapSize ? snapSize[1] : innerHeight; if (canvas.width !== Math.floor(w * renderer.getPixelRatio()) || canvas.height !== Math.floor(h * renderer.getPixelRatio())) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); if (composer) { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); } } }
 addEventListener('resize', resize);
 function tick() {
   resize(); if (photoPass) photoPass.uniforms.t.value = (performance.now() % 997) * 0.01;
@@ -907,6 +991,7 @@ function tick() {
 }
 setView('chef'); resize();
 renderer.setAnimationLoop(tick);
-window.DBG = { scene, renderer, camera, M, THREE, hallG, people, usdz: buildUSDZ, amb: () => AMB, look: (x, z, tx, tz, p = -0.1) => { planMode = false; pos.set(x, EYE, z); yaw = lookYaw(x, z, tx, tz); pitch = p; } };   // console access for tuning: DBG.look(x, z, targetX, targetZ)
+window.DBG = { scene, renderer, camera, M, THREE, hallG, people, usdz: buildUSDZ, amb: () => AMB, snap: (w = 1280, h = 720, q = 0.9) => {   // fixed-size capture for before/after comparisons (render → read back in the same task)
+  snapSize = [w, h]; tick(); const d = canvas.toDataURL('image/jpeg', q); snapSize = null; return d; }, look: (x, z, tx, tz, p = -0.1) => { planMode = false; pos.set(x, EYE, z); yaw = lookYaw(x, z, tx, tz); pitch = p; } };   // console access for tuning: DBG.look(x, z, targetX, targetZ)
 </script>
 </body></html>
