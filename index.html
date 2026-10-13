@@ -121,7 +121,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches;
-const LOWMEM = isTouch || /OculusBrowser|Quest|Pico|Wolvic/i.test(navigator.userAgent);   // phones, tablets, standalone headsets: 1K textures, fewer maps
+const LOWMEM = isTouch || /OculusBrowser|Quest|Pico|Wolvic/i.test(navigator.userAgent) || /[?&]lowmem\b/.test(location.search);   // phones, tablets, standalone headsets (or ?lowmem to test): 1K near / 512 far textures, fewer maps
 const canvas = $('c');
 
 // ---------- Renderer / scene ----------
@@ -221,7 +221,7 @@ const T = {
 // 2K on computers for the big close surfaces, 1K everywhere else and on phones / headsets (GPU memory). ORM = R ambient occlusion, G roughness, B metalness.
 const MAXA = renderer.capabilities.getMaxAnisotropy(), HI2K = new Set(['inox', 'metro', 'sol', 'marble', 'oak', 'imp']), FAR = new Set(['hwall', 'hfloor', 'iron', 'crate']), WUV = new Set();   // FAR: no normal map on phones (GPU memory)
 function tex9(set, kind, size, rot, cb) {
-  loadTex(`v9/${!LOWMEM && HI2K.has(set) ? '2k' : '1k'}/${set}_${kind}.jpg`, kind === 'c' && set !== 'imp' && set !== 'dust', t => { t.repeat.set(1 / size, 1 / size); t.rotation = rot; t.anisotropy = LOWMEM ? Math.min(4, MAXA) : MAXA; cb(t); });
+  loadTex(`v9/${HI2K.has(set) ? (LOWMEM ? '1k' : '2k') : (LOWMEM ? '512' : '1k')}/${set}_${kind}.jpg`, kind === 'c' && set !== 'imp' && set !== 'dust', t => { t.repeat.set(1 / size, 1 / size); t.rotation = rot; t.anisotropy = LOWMEM ? Math.min(4, MAXA) : MAXA; cb(t); });
 }
 function pbr(set, size, list, { c = true, n = !(LOWMEM && FAR.has(set)), rot = 0 } = {}) {   // list: [material, props applied with the colour map, normalScale]
   list.forEach(([m]) => WUV.add(m));
@@ -364,6 +364,7 @@ function cylUV(g, r, h) {   // side: u × circumference, v × height · caps: ×
   for (let i = 0; i < uv.count; i++) { const s = i < side; uv.setXY(i, uv.getX(i) * (s ? 2 * Math.PI * r : 2 * r), uv.getY(i) * (s ? h : 2 * r)); }
   uv.needsUpdate = true; return g;
 }
+const torusUV = g => { const p = g.parameters; return planeUV(g, p.arc * p.radius, 2 * Math.PI * p.tube); };   // u along the ring, v around the tube, in metres
 const planeUV = (g, w, h) => { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w, uv.getY(i) * h); uv.needsUpdate = true; return g; };
 
 // ---------- Builders ----------
@@ -441,7 +442,7 @@ const hallG = new THREE.Group(), _hall0 = scene.children.length;   // everything
     const top = new THREE.Mesh(new THREE.CircleGeometry(1.1, 24, 0, Math.PI), M.daylight); top.position.set(0, 4.1, 0.006); g.add(top);
     const bar = (w, h, px, py) => { const m = new THREE.Mesh(worldUV(new THREE.BoxGeometry(w, h, 0.05), px, py, 0.03), M.iron); m.position.set(px, py, 0.03); g.add(m); };
     bar(0.05, 3.5, -0.37, 3.35); bar(0.05, 3.5, 0.37, 3.35); bar(2.2, 0.06, 0, 4.1); bar(2.2, 0.06, 0, 2.85); bar(2.6, 0.1, 0, 1.58);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.13, 0.045, 6, 24, Math.PI), M.iron); ring.position.set(0, 4.1, 0.03); g.add(ring);
+    const ring = new THREE.Mesh(torusUV(new THREE.TorusGeometry(1.13, 0.045, 6, 24, Math.PI)), M.iron); ring.position.set(0, 4.1, 0.03); g.add(ring);
   }
   for (let x = X0 + 2.5; x < X1; x += 5) { archWindow(x, Z0, 0); archWindow(x, Z1, Math.PI); }
   for (let z = Z0 + 3; z < Z1; z += 5) { archWindow(X0, z, Math.PI / 2); archWindow(X1, z, -Math.PI / 2); }
@@ -578,7 +579,7 @@ const W = 4.933, D = 2.184;                      // interior, metres
   B(2.30, 0.86, 1.584, 1.974, 0.04, 0.60, M.laminate, true); B(4.234, 0, 1.584, 0.04, 0.86, 0.60, M.laminate, true); B(2.30, 0, 1.60, 0.03, 0.86, 0.03, M.inoxDark); B(2.30, 0, 2.15, 0.03, 0.86, 0.03, M.inoxDark);
   B(2.40, 0.90, 1.70, 0.32, 0.08, 0.40, M.alu); B(2.42, 0.98, 1.73, 0.22, 0.03, 0.30, M.inox); B(2.44, 0.98, 1.95, 0.18, 0.14, 0.14, M.alu);
   Cyl(2.67, 1.11, 1.88, 0.14, 0.012, M.plancha, 'x'); B(2.60, 1.10, 1.74, 0.06, 0.03, 0.12, M.inoxDark); B(2.42, 1.01, 1.70, 0.03, 0.03, 0.10, M.black);
-  { const r = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.008, 8, 40), M.inoxDark); r.rotation.y = Math.PI / 2; r.position.set(2.675, 1.11, 1.88); r.castShadow = true; scene.add(r); }   // blade guard
+  { const r = new THREE.Mesh(torusUV(new THREE.TorusGeometry(0.145, 0.008, 8, 40)), M.inoxDark); r.rotation.y = Math.PI / 2; r.position.set(2.675, 1.11, 1.88); r.castShadow = true; scene.add(r); }   // blade guard
   L('C04', 'Trancheuse', 2.56, 1.45, 1.90, true);
   const sh = new THREE.Group(); sh.position.set(2.60, 1.48, D); sh.rotation.x = -0.32; scene.add(sh);
   const shb = new THREE.Mesh(worldUV(new THREE.BoxGeometry(0.56, 0.025, 0.35), 0, 0, -0.175), M.inox); shb.position.set(0, 0, -0.175); shb.castShadow = true; sh.add(shb);   // UVs in metres, group frame
@@ -655,7 +656,7 @@ const stoolX = [0.9, 1.9, 3.1, 4.1];
 {
   for (const x of stoolX) {
     Cyl(x, 0.735, -0.62, 0.17, 0.05, M.seat); Cyl(x, 0.38, -0.62, 0.022, 0.66, M.inox); Cyl(x, 0.008, -0.62, 0.19, 0.016, M.inoxDark);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.012, 8, 36), M.inoxDark); ring.rotation.x = Math.PI / 2; ring.position.set(x, 0.26, -0.62); ring.castShadow = true; scene.add(ring);
+    const ring = new THREE.Mesh(torusUV(new THREE.TorusGeometry(0.16, 0.012, 8, 36)), M.inoxDark); ring.rotation.x = Math.PI / 2; ring.position.set(x, 0.26, -0.62); ring.castShadow = true; scene.add(ring);
     addObs(x - 0.2, -0.82, x + 0.2, -0.42);
   }
   Cyl(2.44, 0.2, -0.5, 0.02, 5.4, M.brass, 'x');
@@ -733,7 +734,7 @@ const gltfLoader = new GLTFLoader(mgr);
 const PEOPLE_EXT = /github\.io$|^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'glb' : 'json';   // binary GLB (18 Mo) on Pages / local; the artefact only serves .json (26 Mo)
 [['chef_f', 0, true], ['chef_m', 1, true], ['client_f_sit', 2], ['client_m_sit', 3], ['client_m', 4]].forEach(([file, idx, toque]) => gltfLoader.load(`assets/people/${file}.${PEOPLE_EXT}`, gltf => {
   const old = people[idx], u = old.userData, o = gltf.scene;
-  o.traverse(n => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; } });
+  o.traverse(n => { if (n.isMesh) { n.castShadow = true; n.frustumCulled = false; const m = n.material; if (LOWMEM && m.normalMap) { m.normalMap.dispose(); m.normalMap = null; m.needsUpdate = true; } } });   // phones/headsets: no avatar normal maps (−53 MB GPU)
   const box = new THREE.Box3().setFromObject(o), s = u.h / (box.max.y - box.min.y);
   o.scale.setScalar(s); o.position.y = -box.min.y * s;
   const rot = u.seated ? (u.x < 2.5 ? 0.75 : -0.75) : u.rot;   // seated clients turn a little towards each other (legs clear of the bar front)
