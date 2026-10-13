@@ -1,7 +1,8 @@
 // Service worker de la visite 3D (GitHub Pages) : la page est servie « réseau d'abord » (les nouvelles versions arrivent),
 // les ressources (textures, avatars GLB, three.js sur cdn.jsdelivr.net) « cache d'abord » (hors-ligne après la première visite).
-// Si une ressource change de contenu sans changer de nom : incrémenter CACHE.
-const CACHE = 'halles3d-v3';   // v2 = V9 textures (assets/tex/v9), the old ones are purged
+// Si une ressource change de contenu sans changer de nom : lui donner une nouvelle URL (TEXV dans la page → ?v=N), ne pas changer CACHE.
+// Une nouvelle version du worker recopie ce que les anciens caches halles3d-* contenaient : le hors-ligne survit aux mises à jour.
+const CACHE = 'halles3d-v3';
 const PRE = ['./index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -9,7 +10,16 @@ self.addEventListener('install', e => {
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil((async () => {
+    const cur = await caches.open(CACHE);
+    for (const k of await caches.keys()) {
+      if (k === CACHE || !k.startsWith('halles3d-')) continue;   // other Pages apps share this origin: leave their caches alone
+      const old = await caches.open(k);
+      for (const req of await old.keys()) if (!/\/index\.html$/.test(req.url) && !(await cur.match(req))) await cur.put(req, await old.match(req));
+      await caches.delete(k);
+    }
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener('fetch', e => {
@@ -25,7 +35,7 @@ self.addEventListener('fetch', e => {
   }
   if (url.origin !== location.origin && url.hostname !== 'cdn.jsdelivr.net') return;   // polices Google, etc. : réseau normal
   e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(r => {
-    if (r.ok) { const copy = r.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
+    if (r.ok) { const copy = r.clone(); e.waitUntil(caches.open(CACHE).then(c => c.put(req, copy))); }
     return r;
   })));
 });

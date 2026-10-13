@@ -220,8 +220,9 @@ const T = {
 // V9 PBR set (assets/tex/v9, CC0 ambientCG / Poly Haven + procedural tiles): UVs are in metres (see worldUV), so repeat = 1 / real size of one texture tile.
 // 2K on computers for the big close surfaces, 1K everywhere else and on phones / headsets (GPU memory). ORM = R ambient occlusion, G roughness, B metalness.
 const MAXA = renderer.capabilities.getMaxAnisotropy(), HI2K = new Set(['inox', 'metro', 'sol', 'marble', 'oak', 'imp']), FAR = new Set(['hwall', 'hfloor', 'iron', 'crate']), WUV = new Set();   // FAR: no normal map on phones (GPU memory)
+const TEXV = { metro: 2 };   // bump when a set's files are regenerated under the same names: new URL → the service worker cannot serve the old copy
 function tex9(set, kind, size, rot, cb) {
-  loadTex(`v9/${HI2K.has(set) ? (LOWMEM ? '1k' : '2k') : (LOWMEM ? '512' : '1k')}/${set}_${kind}.jpg`, kind === 'c' && set !== 'imp' && set !== 'dust', t => { t.repeat.set(1 / size, 1 / size); t.rotation = rot; t.anisotropy = LOWMEM ? Math.min(4, MAXA) : MAXA; cb(t); });
+  loadTex(`v9/${HI2K.has(set) ? (LOWMEM ? '1k' : '2k') : (LOWMEM ? '512' : '1k')}/${set}_${kind}.jpg${TEXV[set] ? '?v=' + TEXV[set] : ''}`, kind === 'c' && set !== 'imp' && set !== 'dust', t => { t.repeat.set(1 / size, 1 / size); t.rotation = rot; t.anisotropy = LOWMEM ? Math.min(4, MAXA) : MAXA; cb(t); });
 }
 function pbr(set, size, list, { c = true, n = !(LOWMEM && FAR.has(set)), rot = 0 } = {}) {   // list: [material, props applied with the colour map, normalScale]
   list.forEach(([m]) => WUV.add(m));
