@@ -147,7 +147,8 @@ mgr.onLoad = () => { toast('Textures réelles et personnages chargés.'); captur
 const texLoader = new THREE.TextureLoader(mgr);
 const upd = (m, props) => { Object.assign(m, props); m.needsUpdate = true; };
 function loadTex(file, srgb, cb) {
-  texLoader.load('assets/tex/' + file, t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; cb(t); });
+  texLoader.load('assets/tex/' + file, t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; cb(t); },
+    undefined, () => { if (file.includes('?')) loadTex(file.split('?')[0], srgb, cb); });   // a host that refuses ?v=N → plain name
 }
 // one file → several materials, each with its own repeat (clones share the GPU image)
 const apply = (file, srgb, list) => loadTex(file, srgb, t => list.forEach(([m, key, rx, ry, extra]) => { const u = t.clone(); u.repeat.set(rx, ry); upd(m, { [key]: u, ...extra }); }));
