@@ -145,7 +145,8 @@ const mgr = new THREE.LoadingManager();
 mgr.onProgress = (url, n, total) => toast(`Textures réelles et personnages : ${Math.round(100 * n / total)} %`);
 mgr.onLoad = () => { toast('Textures réelles et personnages chargés.'); captureEnv(); };
 const texLoader = new THREE.TextureLoader(mgr);
-const upd = (m, props) => { Object.assign(m, props); m.needsUpdate = true; };
+const LMC = new WeakMap();   // material → its twin with the baked lightmap (see loadBake)
+const upd = (m, props) => { Object.assign(m, props); m.needsUpdate = true; if (LMC.has(m)) upd(LMC.get(m), props); };
 function loadTex(file, srgb, cb) {
   texLoader.load('assets/tex/' + file, t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; cb(t); },
     undefined, () => { if (file.includes('?')) loadTex(file.split('?')[0], srgb, cb); });   // a host that refuses ?v=N → plain name
@@ -434,7 +435,8 @@ const L = (code, name, x, y, z, exist) => labels.push({ code, name, x, y, z, exi
 const hallG = new THREE.Group(), _hall0 = scene.children.length;   // everything built in this block is moved into hallG below (hidden in AR and in the USDZ export)
 {
   const X0 = -20, X1 = 25, Z0 = -12, Z1 = 14, H = 6.8;        // hall interior, metres
-  const hf = new THREE.Mesh(planeUV(new THREE.PlaneGeometry(60, 60), 60, 60), M.hallFloor); hf.rotation.x = -Math.PI / 2; hf.position.set(2.4, -0.002, 1); hf.receiveShadow = true; scene.add(hf);
+  const hf = new THREE.Mesh(planeUV(new THREE.PlaneGeometry(X1 - X0 + 0.6, Z1 - Z0 + 0.6), X1 - X0 + 0.6, Z1 - Z0 + 0.6), M.hallFloor); hf.rotation.x = -Math.PI / 2; hf.position.set((X0 + X1) / 2, -0.002, (Z0 + Z1) / 2); hf.receiveShadow = true; scene.add(hf);   // runs under the walls (no slot at their foot); the baked light covers the inside
+  const og = new THREE.Mesh(planeUV(new THREE.PlaneGeometry(160, 160), 160, 160), M.hallFloor); og.rotation.x = -Math.PI / 2; og.position.set((X0 + X1) / 2, -0.05, (Z0 + Z1) / 2); og.receiveShadow = true; og.userData.noBake = true; scene.add(og);   // ground outside the hall, seen only in plan view (not baked)
   const roof = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, Z1 - Z0), M.glassRoof); roof.rotation.x = Math.PI / 2; roof.position.set((X0 + X1) / 2, H, (Z0 + Z1) / 2); roof.userData.ceiling = true; scene.add(roof);
   B(X0 - 0.3, 0, Z0 - 0.3, X1 - X0 + 0.6, H, 0.3, M.hallWall); B(X0 - 0.3, 0, Z1, X1 - X0 + 0.6, H, 0.3, M.hallWall);
   B(X0 - 0.3, 0, Z0, 0.3, H, Z1 - Z0, M.hallWall); B(X1, 0, Z0, 0.3, H, Z1 - Z0, M.hallWall);
@@ -481,15 +483,15 @@ scene.children.slice(_hall0).forEach(o => hallG.add(o)); scene.add(hallG);   // 
 const W = 4.933, D = 2.184;                      // interior, metres
 {
   const fl = new THREE.Mesh(planeUV(new THREE.PlaneGeometry(5.283, 2.734), 5.283, 2.734), M.tilesFloor); fl.rotation.x = -Math.PI / 2; fl.position.set(2.4415, 0.001, 1.017); fl.receiveShadow = true; scene.add(fl);
-  B(-0.2, 0, -0.35, 0.2, 2.7, 2.734, M.paint, true);                  // west wall
+  B(-0.2, 0, -0.35, 0.2, 2.7, D + 0.35, M.paint, true);               // west wall, up to the back wall (overlapping faces would bake noise)
   B(-0.2, 0, D, 5.283, 2.7, 0.2, M.paint, true);                      // south wall (back)
   const tw = new THREE.Mesh(planeUV(new THREE.PlaneGeometry(D, 1.8), D, 1.8), M.metroW); tw.rotation.y = Math.PI / 2; tw.position.set(0.002, 0.9, D / 2); tw.receiveShadow = true; scene.add(tw);
   const ts = new THREE.Mesh(planeUV(new THREE.PlaneGeometry(W, 1.8), W, 1.8), M.metroS); ts.rotation.y = Math.PI; ts.position.set(W / 2, 0.9, D - 0.002); ts.receiveShadow = true; scene.add(ts);
   // bar on the north and east sides (customer side), with an overhanging top
   B(-0.2, 0, -0.15, 5.283, 1.05, 0.15, M.woodN, true);
-  B(W, 0, -0.15, 0.15, 1.05, 1.496, M.woodE, true);
+  B(W, 0, 0, 0.15, 1.05, 1.346, M.woodE, true);                      // starts where the front ends: no double face at the corner
   B(-0.35, 1.05, -0.35, 5.583, 0.04, 0.35, M.stone, true);
-  B(W, 1.05, -0.35, 0.3, 0.04, 1.696, M.stoneE, true);
+  B(W, 1.05, 0, 0.3, 0.04, 1.346, M.stoneE, true);
   B(-0.35, 0, -0.35, 5.583, 0.02, 0.2, M.stone);                      // bar foot rail line (customer side)
 }
 
@@ -570,7 +572,7 @@ const W = 4.933, D = 2.184;                      // interior, metres
   const baffle = new THREE.MeshStandardMaterial({ map: T.baffle(1, 1), metalness: 0.8, roughness: 0.42 });
   for (let i = 0; i < 5; i++) { const f = B(0.10 + i * 0.47, 1.9, 1.5, 0.42, 0.012, 0.44, baffle); f.position.set(0.31 + i * 0.47, 1.965, 1.75); f.rotation.x = -0.3; }   // slanted baffle filters (lower edge 1.90 m, top inside the housing)
   B(1.05, 2.52, 1.75, 0.40, 0.3, 0.40, M.inoxDark);
-  B(0.25, 2.092, 1.215, 2.0, 0.008, 0.07, M.lamp);                     // light strip under the hood lip
+  B(0.25, 2.092, 1.215, 2.0, 0.008, 0.07, M.lamp).userData.lightProxy = true;   // light strip under the hood lip (its light = the hood point light: not an emitter in the bake)
   L('C21', 'Hotte', 1.25, 2.7, 1.69);
   // C05 ice machine under the counter (plan page 1 : 400 x 520 at 2.38-2.78, under the C04 slicer ; the PDF's perspective puts it at the east end instead — plan kept), C03 wall shelves
   // V8.5 : machine à glaçons 400 x 520 x 740 avec couvercle de bac, pieds, grille basse (vue 3D du PDF)
@@ -666,7 +668,7 @@ const stoolX = [0.9, 1.9, 3.1, 4.1];
   for (const x of [0.9, 2.5, 4.1]) {
     Cyl(x, 4.85, -0.55, 0.004, 3.9, M.black);
     const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.17, 0.18, 24, 1, true), M.shade); sh.position.set(x, 2.88, -0.55); sh.castShadow = true; scene.add(sh);
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), M.lamp); bulb.position.set(x, 2.84, -0.55); scene.add(bulb);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), M.lamp); bulb.position.set(x, 2.84, -0.55); bulb.userData.lightProxy = true; scene.add(bulb);
     const p = new THREE.PointLight(0xffe6c4, 0.7, 6, 2); p.position.set(x, 2.80, -0.55); scene.add(p);
   }
 }
@@ -680,14 +682,81 @@ for (const x of [0.55, 1.25, 1.95]) { const p = new THREE.PointLight(0xfff0d8, 0
 { const p = new THREE.PointLight(0xfff4e6, 0.8, 7, 2); p.position.set(3.6, 2.5, 0.4); scene.add(p); }
 
 // ---------- Reflections: capture the real stand (tiles, hood, hall, people) and use it as the environment; redone once the real assets are in ----------
+let envStale = false;   // a capture asked for during an XR session is redone when it ends
 function captureEnv() {
-  if (renderer.xr.isPresenting) return;
+  if (renderer.xr.isPresenting) { envStale = true; return; }
+  envStale = false;
   const rt = new THREE.WebGLCubeRenderTarget(512, { type: THREE.HalfFloatType });
   const cc = new THREE.CubeCamera(0.1, 60, rt); cc.position.set(2.45, 1.35, 0.95); scene.add(cc);
   cc.update(renderer, scene); scene.remove(cc);
   const old = scene.environment; scene.environment = pmrem.fromCubemap(rt.texture).texture; rt.dispose(); if (old) old.dispose();
 }
 captureEnv();
+
+// ---------- Baked light (Blender Cycles, tools/bake/): sky through the glass roof, windows, bulbs + every bounce of every light ----------
+// The real-time sun and lamps keep their direct light and shadows; on a baked surface the lightmap replaces the hemisphere light and the
+// diffuse part of the environment (both flat, blind to occlusion). A mesh is found again by material, vertex count and world box: one
+// changed in the code no longer matches and keeps the old lighting until the next bake (tools/bake/README.md). ?nolm = without, to compare.
+const LMV = 1;   // bump with each new bake (same file names: the service worker must not serve the old ones)
+const MKEY = new Map(Object.entries(M).map(([k, m]) => [m, k]));
+const lmKey = o => `${MKEY.get(o.material) || 'x' + (o.material.color ? o.material.color.getHexString() : '')}|${o.geometry.attributes.position.count}|${o.geometry.index ? o.geometry.index.count : 0}`;
+const lmBox = o => { const b = new THREE.Box3().setFromObject(o); return [...b.min.toArray(), ...b.max.toArray()].map(v => Math.round(v * 1000)); };   // mm
+const LM_CHUNK = THREE.ShaderChunk.lights_fragment_maps.replace('irradiance += lightMapIrradiance;', 'irradiance = lightMapIrradiance;').replace('iblIrradiance += getIBLIrradiance( geometryNormal );', '');
+function lmGeom(g, uv, o) {   // per-corner lightmap UVs → attribute uv1; a vertex shared by two UV islands is split in two
+  const idx = g.index, n = idx ? idx.count : g.attributes.position.count, at = Object.entries(g.attributes);
+  if (at.some(([, a]) => a.isInterleavedBufferAttribute)) return null;
+  const seen = new Map(), src = [], ix = new Uint32Array(n);
+  for (let c = 0; c < n; c++) {
+    const v = idx ? idx.getX(c) : c, key = v * 4294967296 + uv[2 * (o + c)] * 65536 + uv[2 * (o + c) + 1];
+    let j = seen.get(key); if (j === undefined) { seen.set(key, j = src.length); src.push(c); } ix[c] = j;
+  }
+  const out = new THREE.BufferGeometry();
+  for (const [name, a] of at) {
+    const s = a.itemSize, A = new a.array.constructor(src.length * s);
+    src.forEach((c, j) => { const v = idx ? idx.getX(c) : c; for (let i = 0; i < s; i++) A[j * s + i] = a.array[v * s + i]; });
+    out.setAttribute(name, new THREE.BufferAttribute(A, s, a.normalized));
+  }
+  const U = new Uint16Array(src.length * 2); src.forEach((c, j) => { U[2 * j] = uv[2 * (o + c)]; U[2 * j + 1] = uv[2 * (o + c) + 1]; });
+  out.setAttribute('uv1', new THREE.BufferAttribute(U, 2, true));
+  out.setIndex(new THREE.BufferAttribute(src.length > 65535 ? ix : new Uint16Array(ix), 1));
+  g.groups.forEach(gr => out.addGroup(gr.start, gr.count, gr.materialIndex));
+  return out;
+}
+function lmMat(m, tex, k) {
+  const prev = m.onBeforeCompile, key = m.customProgramCacheKey();
+  m.lightMap = tex; m.lightMapIntensity = k;
+  m.onBeforeCompile = (sh, r) => { prev.call(m, sh, r); sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_maps>', LM_CHUNK); };
+  m.customProgramCacheKey = () => key + '|lm'; m.needsUpdate = true;
+}
+async function loadBake() {
+  if (/[?&]nolm\b/.test(location.search)) return;
+  const get = f => fetch(`assets/bake/${f}?v=${LMV}`).then(r => r.ok ? r : Promise.reject()).catch(() => fetch('assets/bake/' + f)).then(r => { if (!r.ok) throw new Error(f); return r; });
+  const man = await get('lm.json').then(r => r.json()), uv = new Uint16Array(Uint8Array.from(atob(man.uv), c => c.charCodeAt(0)).buffer);   // UVs inside the JSON: the artifact host serves no .bin
+  const f = `lm_${LOWMEM ? 2048 : 4096}.jpg`, tex = await texLoader.loadAsync(`assets/bake/${f}?v=${LMV}`).catch(() => texLoader.loadAsync('assets/bake/' + f));
+  tex.channel = 1; tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(4, MAXA);
+  const cand = new Map(), box = new Map(), users = new Map(), gUsers = new Map(), mine = new Map();
+  scene.traverse(o => {
+    if (!o.isMesh) return; users.set(o.material, (users.get(o.material) || 0) + 1); gUsers.set(o.geometry, (gUsers.get(o.geometry) || 0) + 1);
+    if (!o.isInstancedMesh && !o.isSkinnedMesh && o.material.isMeshStandardMaterial) { const k = lmKey(o); if (!cand.has(k)) cand.set(k, []); cand.get(k).push(o); }
+  });
+  const hits = [];
+  for (const e of man.meshes) {   // nearest box among the meshes of the same key, within 3 mm (rounding differs between browsers)
+    const list = cand.get(e.k) || []; let best = -1, bd = 4;
+    list.forEach((o, i) => { if (!box.has(o)) box.set(o, lmBox(o)); const d = Math.max(...box.get(o).map((x, j) => Math.abs(x - e.b[j]))); if (d < bd) { bd = d; best = i; } });
+    if (best >= 0) { const o = list.splice(best, 1)[0]; hits.push([o, e]); mine.set(o.material, (mine.get(o.material) || 0) + 1); }
+  }
+  for (const [o, e] of hits) {
+    const g = lmGeom(o.geometry, uv, e.o); if (!g) continue;
+    if (gUsers.get(o.geometry) === 1) o.geometry.dispose(); o.geometry = g;
+    const m = o.material;
+    if (users.get(m) > mine.get(m)) {   // also used by a mesh without lightmap: the baked ones get a twin (texture updates follow it, see upd)
+      if (!LMC.has(m)) { const c = m.clone(); c.userData.lmSrc = m; c.onBeforeCompile = m.onBeforeCompile; c.customProgramCacheKey = m.customProgramCacheKey; lmMat(c, tex, man.scale); LMC.set(m, c); if (WUV.has(m)) WUV.add(c); }
+      o.material = LMC.get(m);
+    } else if (m.lightMap !== tex) lmMat(m, tex, man.scale);
+  }
+  console.log(`[bake] ${hits.length}/${man.meshes.length} surfaces`); captureEnv();
+}
+loadBake().catch(e => console.warn('[bake] off:', e.message));
 
 // ---------- People (optional): two chefs inside, clients at the bar ----------
 const people = [];
@@ -907,7 +976,7 @@ if (navigator.xr && navigator.xr.isSessionSupported) {
     arMode = renderer.xr.getEnvironmentBlendMode() !== 'opaque';
     if (arMode) { hallG.visible = false; savedBg = scene.background; scene.background = null; pos.set(6.3, 0, 1.8); yaw = lookYaw(6.3, 1.8, 2.0, 1.3); }
   });
-  renderer.xr.addEventListener('sessionend', () => { pos.y = EYE; if (arMode) { arMode = false; hallG.visible = true; scene.background = savedBg; } });
+  renderer.xr.addEventListener('sessionend', () => { pos.y = EYE; if (arMode) { arMode = false; hallG.visible = true; scene.background = savedBg; } if (envStale) captureEnv(); });
 }
 
 // AR on iPhone / iPad (no WebXR there): the stand alone (no hall, no people) exported as USDZ for AR Quick Look
@@ -921,7 +990,7 @@ async function buildUSDZ() {
   // restored right after the call, before the first await (the render loop never draws, nor compiles, the export state).
   const sv = [...WUV].map(m => [m, m.roughness, m.roughnessMap, m.normalMap]);
   for (const m of WUV) {
-    if (m.roughnessMap && m.roughness !== 1) { m.roughness = Math.min(1, m.roughness * (USDZ_G.get(m) ?? 0.45)); m.roughnessMap = null; }
+    if (m.roughnessMap && m.roughness !== 1) { m.roughness = Math.min(1, m.roughness * (USDZ_G.get(m) ?? USDZ_G.get(m.userData.lmSrc) ?? 0.45)); m.roughnessMap = null; }
     if (m.normalMap && m.normalScale.x < 0.5) m.normalMap = null;
   }
   let p;
@@ -994,7 +1063,7 @@ function tick() {
 }
 setView('chef'); resize();
 renderer.setAnimationLoop(tick);
-window.DBG = { scene, renderer, camera, M, THREE, hallG, people, usdz: buildUSDZ, amb: () => AMB, snap: (w = 1280, h = 720, q = 0.9) => {   // fixed-size capture for before/after comparisons (render → read back in the same task)
+window.DBG = { scene, renderer, camera, M, THREE, hallG, people, lmKey, lmBox, usdz: buildUSDZ, amb: () => AMB, snap: (w = 1280, h = 720, q = 0.9) => {   // fixed-size capture for before/after comparisons (render → read back in the same task)
   snapSize = [w, h]; tick(); const d = canvas.toDataURL('image/jpeg', q); snapSize = null; return d; }, look: (x, z, tx, tz, p = -0.1) => { planMode = false; pos.set(x, EYE, z); yaw = lookYaw(x, z, tx, tz); pitch = p; } };   // console access for tuning: DBG.look(x, z, targetX, targetZ)
 </script>
 </body></html>
