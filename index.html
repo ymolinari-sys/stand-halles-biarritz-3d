@@ -393,21 +393,25 @@ function tube(ax, ay, az, bx, by, bz, r, mat) {   // cylinder between two points
   m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return m;
 }
 // Photo facade (V9.3): the front photo of a real machine is projected straight along z onto the front of volumes cut to its relief, so it keeps
-// its depth when you walk around it. fr = { x0, x1, y0, y1, mat }: world rectangle covered by the photo, seen from −z (its left edge is at x1).
+// its depth when you walk around it. fr = { x0, x1, y0, y1, mat, face }: face = side the photo is taken from ('-z' by default, '+z', '-x', '+x');
+// x0..x1 = world range it covers across that face (x for a ±z face, z for a ±x face), y0..y1 = heights. Seen from −z its left edge is at x1.
+const FACE = { '+x': [0, 2, -1], '-x': [1, 2, 1], '+z': [4, 0, 1], '-z': [5, 0, -1] };   // box face index, horizontal axis, its sign left → right
 function facadeMat(file) { const map = texLoader.load(`assets/equip/${file}`); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = MAXA; return new THREE.MeshStandardMaterial({ map, roughness: 0.5 }); }
-function project(g, fr, ox, oy, i0 = 0, i1 = g.attributes.position.count) {   // planar UVs of vertices i0..i1; ox, oy = mesh position
-  const p = g.attributes.position, uv = g.attributes.uv;
-  for (let i = i0; i < i1; i++) uv.setXY(i, (fr.x1 - ox - p.getX(i)) / (fr.x1 - fr.x0), (oy + p.getY(i) - fr.y0) / (fr.y1 - fr.y0));
+function project(g, fr, o, i0 = 0, i1 = g.attributes.position.count) {   // planar UVs of vertices i0..i1; o = mesh position [x, y, z]
+  const p = g.attributes.position, uv = g.attributes.uv, [, a, s] = FACE[fr.face || '-z'];
+  for (let i = i0; i < i1; i++) { const h = o[a] + p.getComponent(i, a); uv.setXY(i, (s > 0 ? h - fr.x0 : fr.x1 - h) / (fr.x1 - fr.x0), (o[1] + p.getY(i) - fr.y0) / (fr.y1 - fr.y0)); }
   uv.needsUpdate = true; return g;
 }
-function FB(fr, x, y, z, w, h, d, side, top = side) {   // facade box from its min corner: photo on the −z face, plain materials elsewhere
-  const g = new THREE.BoxGeometry(w, h, d); if (WUV.has(side)) worldUV(g, x + w / 2, y + h / 2, z + d / 2);
-  project(g, fr, x + w / 2, y + h / 2, 20, 24);
-  const m = new THREE.Mesh(g, [side, side, top, top, side, fr.mat]);
+function FB(fr, x, y, z, w, h, d, side, top = side) {   // facade box from its min corner: photo on the face it was taken from, plain materials elsewhere
+  const g = new THREE.BoxGeometry(w, h, d), f = FACE[fr.face || '-z'][0], mats = [side, side, top, top, side, side]; mats[f] = fr.mat;
+  if (WUV.has(side)) worldUV(g, x + w / 2, y + h / 2, z + d / 2);
+  project(g, fr, [x + w / 2, y + h / 2, z + d / 2], f * 4, f * 4 + 4);
+  const m = new THREE.Mesh(g, mats);
   m.position.set(x + w / 2, y + h / 2, z + d / 2); m.castShadow = m.receiveShadow = true; scene.add(m); return m;
 }
-function FC(fr, cx, cy, cz, rx, ry, len) {   // elliptic cylinder along z from its centre, photo projected over it
-  const g = project(new THREE.CylinderGeometry(rx, rx, len, 32).rotateX(Math.PI / 2).scale(1, ry / rx, 1), fr, cx, cy);
+function FC(fr, cx, cy, cz, rx, ry, len) {   // elliptic cylinder from its centre along the facing axis (rx across, ry high), photo projected over it
+  const g = new THREE.CylinderGeometry(rx, rx, len, 32); if ((fr.face || '-z')[1] === 'z') g.rotateX(Math.PI / 2); else g.rotateZ(Math.PI / 2);
+  project(g.scale(1, ry / rx, 1), fr, [cx, cy, cz]);
   const m = new THREE.Mesh(g, fr.mat); m.position.set(cx, cy, cz); m.castShadow = m.receiveShadow = true; scene.add(m); return m;
 }
 function cups(list) {                               // [x, y(base), z] — white espresso cups with handles, instanced (2 draw calls)
@@ -517,19 +521,41 @@ const W = 4.933, D = 2.184;                      // interior, metres
 {
   // V8.5 : C15 = INOMAK 523903 du devis DE00010790, meuble bas froid positif 4 tiroirs 1345 x 700 x 875 avec dosseret 100 (la nomenclature du plan dit « 3 portes » et la vue 3D en dessine 2 : le devis prime).
   // Compartiment moteur de 345 mm à l'extrémité nord (le « + » du plan ; grille latérale côté est sur la vue 3D du PDF), puis 2 colonnes de 500 mm x 2 tiroirs vers le sud ; tiroirs côté est (cuisine)
+  // V9.4 photo facade: Gafic INOMAK PNRP222 front (3/4 render rectified to a flat front, 3rd drawer column cut out → 2 columns + motor panel).
+  // Image = 1350 x 725 mm laid over z0 + Lc → z0 (seen from +x, left edge = south) and y 0.875 → 0.15. Measured motor panel ≈ 440 mm wide (not 345).
   const Lc = 1.345, Dc = 0.70, z0 = 0.015;
+  const f15 = { x0: z0, x1: z0 + Lc, y0: 0.15, y1: 0.875, mat: facadeMat('c15_front.jpg'), face: '+x' };
+  const P15 = (u0, u1, v0, v1, xa, xb, mat) => FB(f15, xa, 0.875 - v1 / 1000, z0 + Lc - u1 * Lc / 1350, xb - xa, (v1 - v0) / 1000, (u1 - u0) * Lc / 1350, mat);   // image mm (u from left, v from top) → box
   legs(0, z0, Dc, z0 + Lc, 0.15);
-  B(0, 0.15, z0, Dc - 0.02, 0.685, Lc, M.inox, true);                                 // carcass 0.15 → 0.835
-  B(Dc - 0.02, 0.16, z0 + 0.345, 0.012, 0.67, Lc - 0.357, M.black);                    // gaskets / shadow behind the drawers
-  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { const z = z0 + 0.357 + i * 0.5, y = 0.17 + j * 0.33; B(Dc - 0.008, y, z, 0.018, 0.32, 0.488, M.inoxDoor); pull(Dc + 0.008, y + 0.26, z, 0.488, '+x'); }
-  B(Dc - 0.008, 0.17, z0 + 0.012, 0.018, 0.655, 0.333, M.inoxDoor);                     // motor compartment panel (north end)
-  for (let k = 0; k < 9; k++) B(Dc + 0.010, 0.20 + k * 0.03, z0 + 0.06, 0.004, 0.012, 0.24, M.black);   // ventilation grille slats, lower part
-  B(Dc + 0.010, 0.76, z0 + 0.03, 0.006, 0.05, 0.30, M.panel); display(Dc + 0.017, 0.785, z0 + 0.09, 0.07, 0.018, M.tempR, '+x'); Cyl(Dc + 0.018, 0.785, z0 + 0.20, 0.004, 0.004, M.pilotG, 'x');   // controller band
-  B(0, 0.835, z0, Dc + 0.03, 0.04, Lc, M.inox);                                        // worktop 0.835 → 0.875
+  P15(0, 1350, 40, 725, 0, Dc - 0.02, M.inox); addObs(0, z0, Dc - 0.02, z0 + Lc);      // carcass 0.15 → 0.835 (the photo shows in the gaps)
+  for (const [u0, u1] of [[12, 444], [457, 885]]) for (const [v0, v1, l1] of [[54, 390, 108], [396, 725, 447]]) { P15(u0, u1, v0, v1, 0.68, 0.705, M.inoxDoor); P15(u0, u1, v0, l1, 0.705, 0.718, M.inoxDoor); }   // 4 drawer fronts + protruding grip lips
+  P15(891, 1331, 51, 725, 0.68, 0.705, M.inoxDoor); P15(891, 1331, 133, 213, 0.705, 0.709, M.black);   // motor compartment panel (north end) + INOMAK controller band
+  for (const [u0, u1] of [[0, 12], [1331, 1350]]) P15(u0, u1, 51, 725, 0.68, 0.705, M.inox);   // side frame posts
+  P15(0, 1350, 0, 43, 0, Dc + 0.03, M.inox);                                            // worktop 0.832 → 0.875
   B(0, 0.875, z0, 0.02, 0.10, Lc, M.inox);                                             // 100 mm dosseret against the wall
   L('C15', 'Meuble réfrigéré 4 tiroirs', 0.35, 1.15, 0.69);
-  B(0.10, 0.875, 0.26, 0.45, 0.32, 0.30, M.inox); B(0.14, 1.145, 0.30, 0.30, 0.06, 0.22, M.black);
-  B(0.55, 1.135, 0.39, 0.16, 0.02, 0.035, M.black); B(0.47, 0.925, 0.265, 0.07, 0.25, 0.012, M.black);
+  // C14 FIAMMA FF10 (Gafic 950333, ref 2.0.087.3010), 265 W x 475 D x 375 H: tap front faces the kitchen (+x), control head at the back.
+  // V9.4 photo facade: Gafic render rectified to the flat front (265 x 271 mm, tap painted out → real geometry); control panel rectified onto the 45° head face.
+  {
+    const zA = 0.2775, zB = zA + 0.265;
+    const f14 = { x0: zA, x1: zB, y0: 0.882, y1: 1.153, mat: facadeMat('c14_front.jpg'), face: '+x' };
+    const P14 = (u0, u1, v0, v1, xa, xb, mat) => FB(f14, xa, 1.153 - v1 / 1000, zB - u1 / 1000, xb - xa, (v1 - v0) / 1000, (u1 - u0) / 1000, mat);   // image mm (u from left, v from top) → box
+    for (const x of [0.20, 0.52]) for (const z of [zA + 0.025, zB - 0.025]) Cyl(x, 0.8785, z, 0.012, 0.007, M.black);   // feet
+    P14(0, 265, 0, 271, 0.17, 0.55, M.inox);                                              // body 0.882 → 1.153
+    P14(73.7, 221.7, 80, 163.3, 0.55, 0.553, M.black); P14(73.7, 181.7, 163.3, 230, 0.55, 0.553, M.black);   // black tap plate, 3 mm proud
+    const ty = 0.936, tz = zB - 0.160;                                                    // drain tap axis
+    Cyl(0.5555, ty, tz, 0.02, 0.005, M.chrome, 'x'); Cyl(0.578, ty, tz, 0.012, 0.04, M.chrome, 'x'); Cyl(0.588, ty - 0.023, tz, 0.010, 0.044, M.chrome);   // flange, valve body, spout
+    B(0.562, 0.946, tz - 0.0175, 0.035, 0.022, 0.035, M.black); B(0.567, 0.966, tz - 0.01, 0.025, 0.012, 0.085, M.black);   // valve hub + lever (towards +z)
+    B(0.165, 1.153, zA - 0.003, 0.39, 0.006, 0.271, M.inox);                              // lid 1.153 → 1.159
+    B(0.49, 1.159, zA + 0.05, 0.03, 0.002, 0.16, M.black);                                // basket slot
+    for (const dz of [-0.008, 0.008]) tube(0.505, 1.161, 0.40 + dz, 0.52, 1.205, 0.40 + dz, 0.003, M.chrome);
+    tube(0.52, 1.205, 0.40, 0.66, 1.265, 0.40, 0.009, M.black);                           // basket handle
+    B(0.29, 1.159, 0.40, 0.025, 0.03, 0.02, M.black); B(0.405, 1.159, 0.40, 0.025, 0.03, 0.02, M.black); B(0.28, 1.189, 0.40, 0.16, 0.014, 0.02, M.black);   // lid handle
+    const hs = new THREE.Shape([[0.075, 1.09], [0.17, 1.09], [0.17, 1.155], [0.183, 1.155], [0.183, 1.188], [0.121, 1.25], [0.075, 1.25]].map(([x, y]) => new THREE.Vector2(x, y)));
+    const head = new THREE.Mesh(new THREE.ExtrudeGeometry(hs, { depth: 0.265, bevelEnabled: false }), M.inox); head.position.z = zA; head.castShadow = head.receiveShadow = true; scene.add(head);   // control head, top at 0.875 + 0.375
+    const pg = new THREE.PlaneGeometry(0.265, 0.0877); pg.rotateY(Math.PI / 2); pg.rotateZ(Math.PI / 4);
+    const pn = new THREE.Mesh(pg, facadeMat('c14_panel.jpg')); pn.position.set(0.1527, 1.2197, 0.41); pn.receiveShadow = true; scene.add(pn);   // black control panel on the 45° face
+  }
   L('C14', 'Friteuse à poser', 0.33, 1.5, 0.41);
 }
 
@@ -538,46 +564,124 @@ const W = 4.933, D = 2.184;                      // interior, metres
   // C13 combi oven on stand
   // V8.4 (plan PRJ ind. 0 + devis DE00010790) : table adossée REALINOX 800 x 700 posée 700 le long du mur et 800 en profondeur, dans l'angle ouest, dosseret 100 ; four UNOX XECC-0523 535 x 672 x 649 dessus, face avant à 0,70 m du mur.
   // V8.5 (vue 3D du PDF, zoom sur le four) : bandeau de commande à l'est, poignée au bord est de la porte contre le bandeau, charnière côté ouest (mur) = « ferrage à droite » vu de face
-  legs(0.03, D - 0.77, 0.67, D - 0.03, 0.88); B(0.03, 0.35, D - 0.77, 0.64, 0.02, 0.74, M.inoxDark); B(0, 0.88, D - 0.80, 0.70, 0.02, 0.80, M.inox); B(0, 0.90, D - 0.02, 0.70, 0.10, 0.02, M.inox); addObs(0, D - 0.80, 0.70, D);
+  // V9.4 table rebuilt from the Gafic REALINOX photo (C42924): 40 mm square legs on black feet, apron, top + dosseret, no undershelf
+  for (const x of [0.02, 0.64]) for (const z of [D - 0.78, D - 0.06]) { B(x, 0.03, z, 0.04, 0.85, 0.04, M.inox); Cyl(x + 0.02, 0.015, z + 0.02, 0.014, 0.03, M.black); }
+  B(0.025, 0.80, D - 0.775, 0.65, 0.08, 0.75, M.inox);                                  // apron under the top
+  B(0, 0.88, D - 0.80, 0.70, 0.02, 0.80, M.inox); B(0, 0.90, D - 0.02, 0.70, 0.10, 0.02, M.inox); addObs(0, D - 0.80, 0.70, D);
+  // V9.4 photo facade: UNOX XECC-0523 front (E1RM studio photo mirrored into the E1LM: controls east, hinge strip west; lettering put back the right way round).
+  // Image = 642 x 748 px = handle edge (east, 6.8 mm proud of the side) → west side, 0.90 → 1.549; door 60 mm, handle 59 mm proud (UNOX SPC drawing)
   const ox = 0.083, oz = D - 0.70;
-  B(ox, 0.9, oz, 0.535, 0.649, 0.672, M.inox);
-  B(ox + 0.02, 0.95, oz - 0.012, 0.28, 0.55, 0.014, M.glassBlack); B(ox + 0.30, 0.95, oz - 0.010, 0.09, 0.55, 0.012, M.inoxDoor); B(ox + 0.41, 0.95, oz - 0.008, 0.12, 0.55, 0.01, M.panel); B(ox + 0.43, 1.32, oz - 0.012, 0.08, 0.12, 0.006, M.screen);
-  handleV(ox + 0.345, 1.0, oz - 0.012, 0.45); dial(ox + 0.47, 1.14, oz - 0.008, '-z', 0.024); Cyl(ox + 0.44, 1.05, oz - 0.01, 0.004, 0.004, M.pilotG, 'z'); Cyl(ox + 0.50, 1.05, oz - 0.01, 0.004, 0.004, M.pilotO, 'z');
-  B(ox + 0.005, 0.935, oz - 0.016, 0.39, 0.015, 0.012, M.inoxDark); B(ox + 0.005, 1.50, oz - 0.016, 0.39, 0.015, 0.012, M.inoxDark); B(ox + 0.005, 0.935, oz - 0.016, 0.015, 0.58, 0.012, M.inoxDark); B(ox + 0.38, 0.935, oz - 0.016, 0.015, 0.58, 0.012, M.inoxDark);   // door frame
+  const f13 = { x0: ox, x1: ox + 0.54175, y0: 0.90, y1: 1.549, mat: facadeMat('c13_front.jpg') };
+  const P13 = (u0, u1, v0, v1, za, zb, mat) => FB(f13, ox + 0.54175 - u1 / 1185, 1.549 - v1 / 1152.5, za, (u1 - u0) / 1185, (v1 - v0) / 1152.5, zb - za, mat);   // image px → box
+  P13(8, 642, 29, 693, oz + 0.06, oz + 0.672, M.inox);                                 // oven casing
+  P13(8, 579, 31, 691, oz, oz + 0.06, M.inox);                                          // door: glass + control column
+  P13(581, 642, 29, 693, oz + 0.005, oz + 0.06, M.inox);                                // CHEFTOP hinge strip
+  P13(8, 642, 693, 748, oz + 0.02, oz + 0.64, M.black);                                 // base and feet
+  P13(566, 642, 0, 29, oz + 0.005, oz + 0.10, M.black);                                 // top hinge cover
+  P13(0, 53, 357, 582, oz - 0.059, oz - 0.034, M.black);                                // handle bar
+  for (const v of [365, 545]) B(ox + 0.50675, 1.549 - (v + 30) / 1152.5, oz - 0.035, 0.02, 30 / 1152.5, 0.036, M.black);   // handle stand-offs
   L('C13', 'Four mixte compact', 0.35, 1.8, 1.83);
   // C10 neutral 400 + C11 induction
   // V8.4 : C10 = module AVEN 700 AV6 « dépose 400 » (400 x 725 x 270) posé sur le soubassement C09, comme C07 ; le corps vient de la boucle des modules plus bas
-  B(0.72, 0.63, 1.476, 0.36, 0.185, 0.008, M.inoxDoor); pull(0.72, 0.77, 1.476, 0.36);   // neutral element drawer
+  // V9.3 photo facade: CAPIC W540604 photo (Gafic 980480, sources/gafic/c10, 3/4 view rectified band by band) on the module front: rounded nosing,
+  // shadow recess, front panel leaning back toward the top, bottom lip; rear upstand with its vent slots (~100 mm, read on the photo). The real element has no drawer.
+  {
+    const f10 = { x0: 0.703, x1: 1.097, y0: 0.60, y1: 0.87, mat: facadeMat('c10_front.jpg') };   // photo 600 × 405 px = 0.394 × 0.27 m
+    FB(f10, 0.703, 0.8247, 1.452, 0.394, 0.0453, 0.032, M.inox);      // nosing
+    FB(f10, 0.703, 0.8033, 1.474, 0.394, 0.0218, 0.010, M.inoxDark);  // shadow recess under the nosing
+    const gp = FB(f10, 0.703, 0.6287, 1.462, 0.394, 0.1746, 0.022, M.inox).geometry, pp = gp.attributes.position;   // panel: top front edge pushed back 12 mm
+    for (let i = 0; i < pp.count; i++) if (pp.getZ(i) < 0 && pp.getY(i) > 0) pp.setZ(i, pp.getZ(i) + 0.012);
+    pp.needsUpdate = true; gp.computeVertexNormals();
+    FB(f10, 0.703, 0.60, 1.462, 0.394, 0.0287, 0.022, M.inox);        // bottom lip
+    B(0.703, 0.869, 2.152, 0.394, 0.10, 0.03, M.inox); B(0.713, 0.95, 2.149, 0.374, 0.01, 0.004, M.black);   // rear upstand + vent slots
+  }
   L('C10', 'Élément neutre 400', 0.90, 1.22, 1.83);
-  B(0.745, 0.87, 1.485, 0.31, 0.112, 0.665, M.black); B(0.75, 0.982, 1.49, 0.30, 0.004, 0.655, M.glassBlack);   // V8.4 : C11 ADVENTYS GLN2 3000F 665 x 310 x 112 posée dans le sens de la profondeur (plan), commandes en bout avant
-  dial(0.80, 0.925, 1.485, '-z', 0.014); dial(1.0, 0.925, 1.485, '-z', 0.014); B(0.86, 0.915, 1.481, 0.08, 0.012, 0.004, M.tempR);
-  for (const z of [1.651, 1.984]) { const r = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.11, 32), new THREE.MeshBasicMaterial({ color: 0x5b6066 })); r.rotation.x = -Math.PI / 2; r.position.set(0.90, 0.987, z); scene.add(r); }
+  // V8.4 : C11 ADVENTYS GLN2 3000F 665 x 310 x 112 posée dans le sens de la profondeur (plan), commandes en bout avant
+  // V9.3 photo facade: Adventys GLN2 F 3000 photo (adventys.com, sources/web/c11, 3/4 view rectified): 27 mm black feet, vertical band,
+  // sloped control panel (64 deep x 45 high), flat casing whose top carries the glass ceramic rectified from the same shot
+  {
+    const f11 = { x0: 0.745, x1: 1.055, y0: 0.897, y1: 0.982, mat: facadeMat('c11_front.jpg') };   // photo 775 × 212 px = 0.31 × 0.085 m
+    FB(f11, 0.745, 0.897, 1.485, 0.31, 0.04, 0.064, M.inoxDoor);     // vertical band under the control panel
+    const sp = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.064, 0), new THREE.Vector2(0.064, 0.045)]);   // control panel profile in (z, y)
+    const gs = new THREE.ExtrudeGeometry(sp, { depth: 0.31, bevelEnabled: false }).rotateY(-Math.PI / 2);   // shape x -> world z, extruded toward -x
+    const ms = new THREE.Mesh(project(gs, f11, [1.055, 0.937, 1.485]), [M.inoxDoor, f11.mat]); ms.position.set(1.055, 0.937, 1.485); ms.castShadow = ms.receiveShadow = true; scene.add(ms);
+    const gt = new THREE.BoxGeometry(0.31, 0.085, 0.602), pt = gt.attributes.position, ut = gt.attributes.uv, top = facadeMat('c11_top.jpg'); top.roughness = 0.3;
+    if (WUV.has(M.inoxDoor)) worldUV(gt, 0.90, 0.9395, 1.849);
+    for (let i = 8; i < 12; i++) ut.setXY(i, 0.5 - pt.getX(i) / 0.31, 0.5 + pt.getZ(i) / 0.602);   // +y face: image top = back, image left = +x (the cook's left)
+    const mt = new THREE.Mesh(gt, [M.inoxDoor, M.inoxDoor, top, M.inoxDoor, M.inoxDoor, M.inoxDoor]); mt.position.set(0.90, 0.9395, 1.849); mt.castShadow = mt.receiveShadow = true; scene.add(mt);
+    for (const x of [0.775, 1.025]) for (const z of [1.516, 2.119]) Cyl(x, 0.8835, z, 0.014, 0.027, M.black);   // feet
+  }
   L('C11', 'Induction à poser', 0.90, 1.4, 1.83);
   // C09 CORECO refrigerated base 1600 x 700 x 600, 3 columns x 2 drawers, under the four AVEN 700 modules C10, C08, C07, C06 (plan : 4 x 400 = 1600) — V8.4
   // V8.5 : hauteur du devis respectée, soubassement 600 (pieds compris) + modules AVEN 270 = plan de cuisson à 870
-  B(0.70, 0.15, 1.484, 1.60, 0.45, 0.70, M.inoxDark, true); legs(0.70, 1.484, 2.30, 2.184, 0.15);   // dark body = dark seams between the drawer fronts
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { B(0.71 + i * 0.5333, 0.165 + j * 0.215, 1.476, 0.513, 0.205, 0.01, M.inoxDoor); pull(0.71 + i * 0.5333, 0.325 + j * 0.215, 1.476, 0.513); }
+  // V9.3 photo facade: CORECO MFB-160-CC photo (sources/gafic/c09, 3/4 view rectified) on its relief: 47 mm worktop edge, drawer fronts 10 mm proud
+  // of the body with their recessed grip channel left at body depth, compressor panel with its grille at the west end; 108 mm feet placed as on the datasheet drawing
+  {
+    const f09 = { x0: 0.70, x1: 2.30, y0: 0.108, y1: 0.60, mat: facadeMat('c09_front.jpg') };   // photo 1200 × 369 px = 1.60 × 0.492 m
+    FB(f09, 0.70, 0.108, 1.494, 1.60, 0.445, 0.69, M.inox);              // body: seams and grip channels
+    FB(f09, 0.70, 0.553, 1.484, 1.60, 0.047, 0.70, M.inox);              // worktop
+    FB(f09, 0.70, 0.108, 1.484, 0.2187, 0.445, 0.0105, M.inox);          // compressor panel
+    FB(f09, 2.2933, 0.108, 1.484, 0.0067, 0.445, 0.0105, M.inox);        // east frame upright
+    for (const [xa, xb] of [[1.8253, 2.2933], [1.3667, 1.8107], [0.92, 1.352]])   // drawer fronts, above and below each grip channel (measured on the photo)
+      for (const [ya, yb] of [[0.4573, 0.5453], [0.3253, 0.4093], [0.2307, 0.3173], [0.108, 0.1813]]) FB(f09, xa, ya, 1.484, xb - xa, yb - ya, 0.0105, M.inoxDoor);
+    addObs(0.70, 1.484, 2.30, 2.184); legs(0.902, 1.596, 2.098, 2.096, 0.108, 0);
+  }
   L('C09', 'Soubassement réfrigéré 6 tiroirs', 1.50, 0.5, 1.46);
   // C08 plancha, C07 neutral, C06 fryer (700 series tops)
-  B(0.70, 0.60, 1.49, 1.60, 0.27, 0.694, M.plate);                   // dark backing = seams between the three 700-series modules
-  for (const x of [0.70, 1.10, 1.50, 1.90]) { B(x + 0.003, 0.60, 1.484, 0.394, 0.27, 0.70, M.inox); Cyl(x + 0.2, 0.861, 1.493, 0.009, 0.394, M.inox, 'x'); }   // modules with a rolled front edge
-  B(1.13, 0.87, 1.60, 0.34, 0.012, 0.50, M.plancha); B(1.13, 0.875, 1.50, 0.34, 0.012, 0.09, M.plancha);
-  B(1.13, 0.88, 2.09, 0.34, 0.07, 0.015, M.inox); B(1.13, 0.88, 1.60, 0.012, 0.07, 0.50, M.inox); B(1.458, 0.88, 1.60, 0.012, 0.07, 0.50, M.inox);   // splash guards
-  B(1.103, 0.62, 1.47, 0.394, 0.10, 0.015, M.panel); dial(1.17, 0.67, 1.47); dial(1.26, 0.67, 1.47); Cyl(1.33, 0.67, 1.468, 0.005, 0.004, M.pilotO, 'z');
-  B(1.37, 0.63, 1.462, 0.11, 0.08, 0.01, M.inoxDoor); B(1.38, 0.69, 1.458, 0.09, 0.006, 0.006, M.black);   // grease drawer
+  // V9.3 photo facades: Gafic photos of the CAPIC AVEN 700 modules (sources/gafic/c08, c07, c06: W540916, W540604, W541031), 3/4 views rectified by
+  // homography to a 400 x 272 mm front at 2 px/mm; side profile from the W540916 drawing (sources/web/c08): recessed kick, plinth, control panel
+  // inclined 60 mm back over 128 mm, rolled nosing 0.808-0.87. Photo projected along z on the faces that look at the cook; knobs, tap, plate, guards, basket in 3D
+  B(0.70, 0.601, 1.556, 1.205, 0.259, 0.614, M.plate);                // dark backing = seams between the four 700-series modules (under their tops: no shared face; stops inside C06, out of its well); starts behind the 70 mm AVEN profile so it never shows over the inclined panel
+  B(0.703, 0.60, 1.484, 0.394, 0.27, 0.70, M.inox); Cyl(0.90, 0.861, 1.493, 0.009, 0.394, M.inox, 'x');   // C10 body (its drawer is in the C10 block above)
+  const avS = new THREE.Shape(), avZ = 0.07;   // AVEN side profile as (depth behind the front plane z = 1.484, height): kick, plinth, inclined panel, nosing underside, roll, top, back
+  avS.moveTo(0.015, 0.60); avS.lineTo(0.015, 0.6265); avS.lineTo(0.002, 0.6265); avS.lineTo(0.002, 0.68); avS.lineTo(0.062, 0.808); avS.lineTo(0.031, 0.808);
+  for (let k = 1; k <= 12; k++) { const t = -Math.PI / 2 - k * Math.PI / 12; avS.lineTo(0.031 + 0.031 * Math.cos(t), 0.839 + 0.031 * Math.sin(t)); }
+  avS.lineTo(avZ, 0.87); avS.lineTo(avZ, 0.60);
+  const aven = (x0, file, top = 0.87) => {   // one 400 module: profile extruded across x (photo on the faces turned to the cook, plain inox on the others) + body behind it
+    const w = 0.394, zf = 1.484, fr = { x0, x1: x0 + w, y0: 0.60, y1: 0.87, mat: facadeMat(file) }, o = [x0 + w, 0, zf];
+    const g = new THREE.ExtrudeGeometry(avS, { depth: w, bevelEnabled: false }).rotateY(-Math.PI / 2), p = g.attributes.position, n = g.attributes.normal, cap = g.groups[0].count;
+    const mi = i => i < cap ? 0 : Math.abs(n.getZ(i) + n.getZ(i + 1) + n.getZ(i + 2)) > 0.45 && p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2) < 3 * avZ - 0.003 ? 1 : 0;
+    g.clearGroups(); let s = 0, cur = -1;
+    for (let i = 0; i <= p.count; i += 3) { const m = i < p.count ? mi(i) : -1; if (m !== cur) { if (cur >= 0) { g.addGroup(s, i - s, cur); if (cur) project(g, fr, o, s, i); } s = i; cur = m; } }
+    const m = new THREE.Mesh(g, [M.inox, fr.mat]); m.position.set(o[0], 0, zf); m.castShadow = m.receiveShadow = true; scene.add(m);
+    FB(fr, x0, 0.60, zf + avZ, w, top - 0.60, 2.184 - zf - avZ, M.inox); return fr;
+  };
+  const tilt = Math.atan2(0.06, 0.128), nY = Math.sin(tilt), nZ = -Math.cos(tilt);   // normal of the inclined panel (towards the cook and up)
+  const onPanel = (geo, mat, x, y, out) => {   // part standing on the inclined panel at photo-plane (x, y), centre `out` m along the normal
+    const m = new THREE.Mesh(geo, mat), z = 1.486 + (y - 0.68) / 0.128 * 0.06; m.rotation.x = tilt - Math.PI / 2; m.position.set(x, y + nY * out, z + nZ * out); m.castShadow = true; scene.add(m); return m;
+  };
+  aven(1.103, 'c08_front.jpg');   // C08 CAPIC AVEN 700 smooth electric plancha (Gafic 985576, W540916)
+  B(1.123, 0.87, 1.59, 0.354, 0.014, 0.52, M.inoxDark); B(1.109, 0.884, 1.575, 0.382, 0.015, 0.545, M.plancha); B(1.295, 0.887, 1.5735, 0.01, 0.006, 0.002, M.black);   // plate support, 15 mm plate, juice hole
+  const gS = new THREE.Shape([[0, 0], [0.545, 0], [0.545, 0.10], [0, 0.024]].map(([a, b]) => new THREE.Vector2(a, b)));   // side guard: 24 mm high at the front, 100 at the back
+  for (const x of [1.117, 1.491]) { const m = new THREE.Mesh(new THREE.ExtrudeGeometry(gS, { depth: 0.008, bevelEnabled: false }).rotateY(-Math.PI / 2), M.inox); m.position.set(x, 0.899, 1.575); m.castShadow = m.receiveShadow = true; scene.add(m); }
+  B(1.117, 0.899, 2.112, 0.366, 0.10, 0.008, M.inox); B(1.109, 0.87, 2.122, 0.382, 0.03, 0.02, M.plate);   // back splash guard, vent strip
+  onPanel(new THREE.CylinderGeometry(0.0385, 0.0385, 0.012, 32), M.panel, 1.206, 0.7236, 0.005); onPanel(new THREE.CylinderGeometry(0.025, 0.026, 0.03, 32), M.black, 1.206, 0.7236, 0.015); onPanel(new THREE.BoxGeometry(0.011, 0.016, 0.046), M.black, 1.206, 0.7236, 0.036);   // thermostat knob: skirt, cap, grip
+  onPanel(new THREE.CylinderGeometry(0.015, 0.015, 0.02, 24), M.black, 1.304, 0.7226, 0.009);   // switch
+  B(1.368, 0.749, 1.506, 0.122, 0.019, 0.025, M.inoxDoor);   // juice drawer lip
   L('C08', 'Plancha 400', 1.30, 1.25, 1.83);
-  B(1.52, 0.63, 1.476, 0.36, 0.185, 0.008, M.inoxDoor); pull(1.52, 0.77, 1.476, 0.36);   // neutral element drawer
+  aven(1.503, 'c07_front.jpg');   // C07 CAPIC AVEN 700 neutral element (Gafic 980480, W540604): plain inclined front, no drawer on the photo
   L('C07', 'Élément neutre 400', 1.70, 1.25, 1.83);
-  for (const [x, z, w, d] of [[1.93, 1.60, 0.34, 0.015], [1.93, 2.065, 0.34, 0.015], [1.93, 1.60, 0.015, 0.48], [2.255, 1.60, 0.015, 0.48]]) B(x, 0.87, z, w, 0.025, d, M.inoxDark);   // fryer well rim
-  B(1.945, 0.87, 1.615, 0.31, 0.012, 0.45, M.oil);
-  B(1.903, 0.62, 1.47, 0.394, 0.10, 0.015, M.panel); display(1.99, 0.67, 1.47, 0.075, 0.028, M.tempF); dial(2.12, 0.67, 1.47); Cyl(2.20, 0.67, 1.468, 0.005, 0.004, M.pilotG, 'z'); Cyl(2.24, 0.67, 1.468, 0.005, 0.004, M.pilotO, 'z');
-  for (const x of [2.0, 2.2]) { Cyl(x, 0.97, 1.50, 0.01, 0.22, M.inoxDark, 'z'); B(x - 0.05, 0.96, 1.37, 0.10, 0.02, 0.03, M.black); B(x - 0.08, 0.83, 1.63, 0.16, 0.14, 0.32, M.wire); }   // baskets
+  aven(1.903, 'c06_front.jpg', 0.80);   // C06 CAPIC AVEN 700 electric fryer (Gafic 985580, W541031): body stops under the well
+  const pl06 = { x0: 0, x1: 1, y0: 0, y1: 1, mat: M.inox };   // plain facade (sharp boxes, no bevel groove against the profile)
+  for (const [x, z, w, d] of [[1.903, 1.554, 0.394, 0.066], [1.903, 2.03, 0.394, 0.154], [1.903, 1.62, 0.02, 0.41], [2.277, 1.62, 0.02, 0.41]]) FB(pl06, x, 0.80, z, w, 0.07, d, M.inox);   // top around the well
+  B(1.913, 0.831, 1.61, 0.374, 0.004, 0.43, M.oil); B(1.937, 0.801, 1.635, 0.326, 0.065, 0.37, M.wire);   // oil, single basket (as on the photo)
+  tube(2.05, 0.80, 1.645, 2.05, 0.905, 1.645, 0.005, M.chrome); tube(2.05, 0.905, 1.645, 2.05, 0.93, 1.50, 0.014, M.black);   // basket handle: rod + grip towards the cook
+  B(1.913, 0.87, 2.075, 0.374, 0.03, 0.06, M.inox); B(1.933, 0.879, 2.071, 0.334, 0.012, 0.004, M.black);   // flue with its slots
+  Cyl(2.006, 0.647, 1.468, 0.011, 0.036, M.chrome, 'z'); B(1.966, 0.652, 1.452, 0.081, 0.014, 0.012, M.black); tube(2.006, 0.647, 1.456, 2.006, 0.612, 1.456, 0.007, M.chrome);   // drain tap (rubbed out of the photo): valve, lever, spout
   L('C06', 'Friteuse 400', 2.10, 1.25, 1.83);
   B(0.70, 0.87, 2.15, 1.60, 0.12, 0.034, M.inox);                     // upstand
   // C12 rod shelf
-  for (let k = 0; k < 5; k++) Cyl(1.30, 1.56, 1.90 + k * 0.06, 0.009, 1.20, M.inoxDark, 'x');
-  B(0.70, 1.53, 1.884, 1.20, 0.025, 0.025, M.inox); B(0.70, 1.53, 2.14, 1.20, 0.025, 0.03, M.inox);
-  for (const x of [0.76, 1.84]) B(x, 1.40, 1.95, 0.03, 0.13, 0.23, M.inoxDark);
+  // V9.4 : TOURNUS 805721 (Gafic 802211) étagère murale 4 barres 1200 x 400 sur consoles, d'après sa fiche technique 102332 et sa photo (sources/gafic/c12) :
+  // 4 tubes inox 25 x 25 (80 mm de vide entre tubes, tube avant à 400 mm du mur), 2 consoles en fer plat à 100 mm des extrémités avec embout noir,
+  // pattes murales moulées gris foncé de 150 mm (2 vis en haut, 1 en bas)
+  for (let k = 0; k < 4; k++) B(0.70, 1.545, 1.784 + k * 0.105, 1.20, 0.025, 0.025, M.inox);   // square tubes, top at 1.57
+  const brShape = new THREE.Shape([[-0.022, 0], [0.022, 0], [0.036, -0.022], [0.036, -0.042], [0.02, -0.06], [0.02, -0.136], [0.011, -0.15], [-0.011, -0.15], [-0.02, -0.136], [-0.02, -0.06], [-0.036, -0.042], [-0.036, -0.022]].map(([x, y]) => new THREE.Vector2(x, y)));
+  const gBr = new THREE.ExtrudeGeometry(brShape, { depth: 0.037, bevelEnabled: false }), mBr = new THREE.MeshStandardMaterial({ color: 0x3b3e42, roughness: 0.55 });   // moulded wall bracket outline (datasheet front view)
+  for (const x of [0.80, 1.80]) {
+    B(x - 0.004, 1.505, 1.805, 0.008, 0.0395, 0.342, M.inox); B(x - 0.0075, 1.50, 1.78, 0.015, 0.044, 0.025, M.black);   // flat-bar console under the tubes + black end cap
+    const br = new THREE.Mesh(gBr, mBr); br.position.set(x, 1.618, 2.147); br.castShadow = br.receiveShadow = true; scene.add(br);
+    for (const [dx, y] of [[-0.016, 1.588], [0.016, 1.588], [0, 1.488]]) Cyl(x + dx, y, 2.145, 0.006, 0.004, M.inoxDark, 'z');   // screw heads
+  }
   for (const [x, r, h] of [[0.86, 0.11, 0.14], [1.13, 0.085, 0.19], [1.42, 0.13, 0.11], [1.73, 0.10, 0.16]]) {   // pots with lids and handles on the shelf
     Cyl(x, 1.57 + h / 2, 2.02, r, h, M.inoxDoor); Cyl(x, 1.577 + h, 2.02, r + 0.006, 0.014, M.inoxDoor); Cyl(x, 1.59 + h, 2.02, 0.012, 0.03, M.black);
     B(x - r - 0.035, 1.57 + h - 0.03, 2.01, 0.04, 0.02, 0.02, M.inoxDark); B(x + r, 1.57 + h - 0.03, 2.01, 0.04, 0.02, 0.02, M.inoxDark);
@@ -586,22 +690,69 @@ const W = 4.933, D = 2.184;                      // interior, metres
   B(1.45, 0.0005, 0.95, 0.30, 0.004, 0.30, M.plate); for (let k = 0; k < 5; k++) B(1.47 + k * 0.06, 0.0045, 0.95, 0.015, 0.003, 0.30, M.inoxDark);   // floor drain grate
   L('C12', 'Étagère barreaudée 1 niveau', 1.30, 1.85, 2.0);
   // C21 hood
-  B(0, 2.1, 1.19, 2.50, 0.42, 0.994, M.hood); B(0.04, 2.0, 1.33, 2.42, 0.11, 0.80, M.plate);   // canopy + dark filter housing
+  // V9.4 : VIM VORAX BASIC G (Gafic 630434, VIM 180012) 2500 x 1000 x 400, hotte adossée motorisée, d'après la notice NT-00000358 et le catalogue VIM (sources/web/c21) :
+  // caisson creux en inox brossé (façade, joues, plafond luminaire), gouttière périphérique, banc de filtres incliné au fond (bas à 176 mm du mur, haut à 635 mm)
+  // sur le profil bas avec sa purge, entretoises et tôles d'obturation, dessus et dos en galva, platine 350 + gaine Ø 315 au refoulement vertical, plaque VIM en bas à gauche
+  const galva = new THREE.MeshStandardMaterial({ color: 0xaab0b3, metalness: 0.9, roughness: 0.5 });   // galvanised rear and top panels, duct
+  B(0, 2.1, 1.19, 2.50, 0.40, 0.015, M.hood);                                                // façade
+  for (const x of [0, 2.485]) B(x, 2.1, 1.205, 0.015, 0.40, 0.979, M.hood);                 // side cheeks
+  B(0.015, 2.485, 1.205, 2.47, 0.015, 0.344, M.hood); B(0.015, 2.485, 1.549, 2.47, 0.015, 0.62, galva); B(0.015, 2.1, 2.169, 2.47, 0.385, 0.015, galva);   // luminaire ceiling, plenum top, back panel
+  B(0.015, 2.1, 1.205, 2.47, 0.04, 0.095, M.hood); for (const x of [0.015, 2.44]) B(x, 2.1, 1.30, 0.045, 0.04, 0.708, M.hood);   // peripheral gutter: front (the hood lip) and sides
+  B(0.015, 2.1, 2.008, 2.47, 0.06, 0.161, M.hood); Cyl(2.33, 2.088, 2.09, 0.011, 0.024, M.chrome);   // profil bas (grease trough under the filters) + purge plug
   const baffle = new THREE.MeshStandardMaterial({ map: T.baffle(1, 1), metalness: 0.8, roughness: 0.42 });
-  for (let i = 0; i < 5; i++) { const f = B(0.10 + i * 0.47, 1.9, 1.5, 0.42, 0.012, 0.44, baffle); f.position.set(0.31 + i * 0.47, 1.965, 1.75); f.rotation.x = -0.3; }   // slanted baffle filters (lower edge 1.90 m, top inside the housing)
-  B(1.05, 2.52, 1.75, 0.40, 0.3, 0.40, M.inoxDark);
+  const A = 0.6164, uy = Math.sin(A), uz = -Math.cos(A);   // filter bank from the trough (y 2.16, z 2.008) up and toward the front to the ceiling (y 2.485, z 1.549); faces the cook
+  const bank = (x, w, s0, s1, t, out, mat) => { const s = (s0 + s1) / 2, o = out - t / 2, m = B(0, 0, 0, w, t, s1 - s0, mat); m.position.set(x + w / 2, 2.16 + s * uy - o * Math.cos(A), 2.008 + s * uz - o * uy); m.rotation.x = A; return m; };
+  for (let i = 0; i < 5; i++) bank(0.2075 + i * 0.422, 0.397, 0.003, 0.475, 0.025, 0, baffle);   // 5 baffle filters 397 wide
+  for (let i = 0; i < 6; i++) bank(0.1825 + i * 0.422, 0.025, 0.003, 0.475, 0.02, 0.006, M.hood);   // spacers between the filters
+  for (const x of [0.015, 2.3175]) bank(x, 0.1675, 0.003, 0.475, 0.012, 0, M.hood);               // blanking plates at both ends
+  bank(0.015, 2.47, 0.475, 0.568, 0.015, 0.006, M.hood);                                          // top retaining channel, up into the ceiling
+  B(1.075, 2.50, 1.7525, 0.35, 0.006, 0.35, galva); Cyl(1.25, 2.663, 1.9275, 0.1575, 0.314, galva);   // collar plate + Ø 315 duct over the fan outlet (184 mm from the wall)
+  FB({ x0: 2.405, x1: 2.48, y0: 2.11, y1: 2.14, mat: facadeMat('c21_badge.jpg') }, 2.405, 2.11, 1.188, 0.075, 0.03, 0.002, M.white);   // VIM plate (logo from the VIM notice)
   B(0.25, 2.092, 1.215, 2.0, 0.008, 0.07, M.lamp).userData.lightProxy = true;   // light strip under the hood lip (its light = the hood point light: not an emitter in the bake)
   L('C21', 'Hotte', 1.25, 2.7, 1.69);
   // C05 ice machine under the counter (plan page 1 : 400 x 520 at 2.38-2.78, under the C04 slicer ; the PDF's perspective puts it at the east end instead — plan kept), C03 wall shelves
   // V8.5 : machine à glaçons 400 x 520 x 740 avec couvercle de bac, pieds, grille basse (vue 3D du PDF)
-  B(2.38, 0.10, 1.61, 0.40, 0.64, 0.52, M.inox, true); B(2.39, 0.74, 1.62, 0.38, 0.06, 0.50, M.inoxDark); B(2.395, 0.12, 1.605, 0.37, 0.16, 0.006, M.black); B(2.40, 0.295, 1.6035, 0.36, 0.43, 0.004, M.plate); B(2.405, 0.30, 1.602, 0.35, 0.42, 0.006, M.inoxDoor); pull(2.405, 0.675, 1.602, 0.35);
-  for (let k = 0; k < 6; k++) B(2.405, 0.13 + k * 0.025, 1.602, 0.35, 0.008, 0.004, M.inoxDoor);   // ventilation grille slats
+  // V9.4 : existing machine of unknown brand -> representative model Scotsman EC 57 easy-fit (386 x 600 x 695 + 34 mm feet), front photo from the Gafic
+  // cache (SCODIF ECM57AS, sources/gafic/c05) scaled to 400 wide, maker's badges and stickers painted out: stainless cabinet, joint bead, grey cover
+  // (frame, recessed bin flap, grip pocket), handle, feet
+  const f05 = { x0: 2.38, x1: 2.78, y0: 0.034, y1: 0.7602, mat: facadeMat('c05_front.jpg') };   // photo 759 x 1378 px = 0.40 x 0.726 m
+  const g05 = new THREE.MeshStandardMaterial({ color: 0x5b5e63, roughness: 0.7 });          // grey ABS top cover
+  FB(f05, 2.3805, 0.034, 1.61, 0.3984, 0.3794, 0.52, M.inox);                 // stainless cabinet (condenser grille)
+  FB(f05, 2.3768, 0.4134, 1.602, 0.4053, 0.0079, 0.528, g05);               // joint bead
+  FB(f05, 2.38, 0.4213, 1.63, 0.40, 0.3389, 0.50, g05);                     // cover core (back of the grip pocket)
+  FB(f05, 2.38, 0.4213, 1.605, 0.0395, 0.3389, 0.025, g05); FB(f05, 2.7431, 0.4213, 1.605, 0.0369, 0.3389, 0.025, g05);   // frame stiles
+  FB(f05, 2.4195, 0.7333, 1.605, 0.3236, 0.0269, 0.025, g05); FB(f05, 2.4195, 0.4213, 1.605, 0.3236, 0.0237, 0.025, g05);   // frame rails
+  FB(f05, 2.4195, 0.5152, 1.611, 0.3236, 0.2181, 0.019, g05);               // bin flap, set back 6 mm
+  FB(f05, 2.4843, 0.0546, 1.600, 0.0311, 0.2224, 0.010, M.black);           // pull handle
+  for (const x of [2.405, 2.755]) for (const z of [1.635, 2.105]) Cyl(x, 0.017, z, 0.015, 0.034, M.inoxDoor);   // feet
+  addObs(2.38, 1.61, 2.78, 2.13);
   L('C05', 'Machine à glaçons', 2.58, 0.75, 1.61, true);
   // V8.5 : comptoir blanc existant de 2,30 à 4,27 m (vue 3D du PDF : plan blanc continu au-dessus de C05/C04 et de C01, joue pleine à l'extrémité est, pas de dosseret)
   B(2.30, 0.86, 1.584, 1.974, 0.04, 0.60, M.laminate, true); B(4.234, 0, 1.584, 0.04, 0.86, 0.60, M.laminate, true); B(2.30, 0, 1.60, 0.03, 0.86, 0.03, M.inoxDark); B(2.30, 0, 2.15, 0.03, 0.86, 0.03, M.inoxDark);
-  B(2.40, 0.90, 1.70, 0.32, 0.08, 0.40, M.alu); B(2.42, 0.98, 1.73, 0.22, 0.03, 0.30, M.inox); B(2.44, 0.98, 1.95, 0.18, 0.14, 0.14, M.alu);
-  Cyl(2.67, 1.11, 1.88, 0.14, 0.012, M.plancha, 'x'); B(2.60, 1.10, 1.74, 0.06, 0.03, 0.12, M.inoxDark); B(2.42, 1.01, 1.70, 0.03, 0.03, 0.10, M.black);
-  { const r = new THREE.Mesh(torusUV(new THREE.TorusGeometry(0.145, 0.008, 8, 40)), M.inoxDark); r.rotation.y = Math.PI / 2; r.position.set(2.675, 1.11, 1.88); r.castShadow = true; scene.add(r); }   // blade guard
+  // V9.4 C04 : existing slicer of unknown brand -> representative model AFI Collin Lucy T250C (gravity, 250 mm blade, 580 x 375 x 460), Gafic photo
+  // (sources/gafic/c04) shot 3/4 front-left: stretched x 1.163 so the blade guard is round again, then projected on volumes cut to its outline.
+  // Blade now faces the aisle (-z) like a slicer in use on a counter; top kept under the inclined shelf (y <= 1.32 where z > 1.80).
+  {
+    const fr = { x0: 2.30906, x1: 2.88, y0: 0.84673, y1: 1.30819, mat: facadeMat('c04_front.jpg') };   // texture 1163 x 940 px = 0.571 x 0.461 m
+    const s04 = new THREE.MeshStandardMaterial({ color: 0xc4c8cc, metalness: 0.55, roughness: 0.35 });   // cast-aluminium sides
+    const slab = (pts, z0, z1) => {                   // photo outline [x, y, ...] extruded from z0 to z1, photo on the front cap
+      const sp = new THREE.Shape(); sp.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) sp.lineTo(pts[i], pts[i + 1]);
+      const m = new THREE.Mesh(project(new THREE.ExtrudeGeometry(sp, { depth: z1 - z0, bevelEnabled: false }), fr, [0, 0, z0]), [fr.mat, s04]);
+      m.position.z = z0; m.castShadow = m.receiveShadow = true; scene.add(m); return m;
+    };
+    FB(fr, 2.30906, 0.94, 1.70, 0.57094, 0.0614, 0.295, s04);   // base
+    FB(fr, 2.7213, 0.901, 1.62, 0.1387, 0.0709, 0.085, s04);    // front control block (slice thickness)
+    FB(fr, 2.6602, 0.901, 1.64, 0.0611, 0.1617, 0.10, s04);     // carriage column
+    FB(fr, 2.5854, 0.995, 1.70, 0.0788, 0.075, 0.10, s04);      // carriage support under the arm
+    slab([2.8469,1.2139,2.6117,1.2483,2.6088,1.129,2.4746,1.1388,2.4575,1.1413,2.4301,1.1364,2.4278,1.1216,2.4347,1.1069,2.4632,1.0897,2.5717,1.0848,2.586,1.0627,2.6602,1.0554,2.7213,1.0431,2.7213,0.9989,2.8029,0.9989,2.8286,1.0077,2.8572,1.0431,2.8754,1.1216], 1.655, 1.755);   // inclined carriage plate + pusher arm
+    FC(fr, 2.4786, 1.1241, 1.78, 0.135, 0.1325, 0.044);         // blade and its guard ring
+    slab([2.5991,1.2419,2.5968,1.2689,2.5728,1.29,2.5489,1.2974,2.4632,1.3003,2.4461,1.2895,2.4368,1.2502,2.411,1.2389,2.3881,1.2226,2.3692,1.202,2.355,1.178,2.3463,1.1517,2.3433,1.1241,2.3463,1.0965,2.355,1.0702,2.3692,1.0462,2.3881,1.0256,2.411,1.0093,2.4368,0.998,2.4645,0.9923,2.4928,0.9923,2.5204,0.998,2.5463,1.0093,2.5692,1.0256,2.5881,1.0462,2.6022,1.0702,2.611,1.0965,2.6139,1.1241,2.611,1.1517,2.6022,1.178], 1.80, 1.96);   // motor body and blade cover
+    for (const x of [2.335, 2.855]) for (const z of [1.73, 1.965]) Cyl(x, 0.92, z, 0.02, 0.04, M.black);   // rubber feet
+    Cyl(2.82, 0.928, 1.605, 0.022, 0.03, M.black, 'z'); B(2.818, 0.938, 1.588, 0.004, 0.01, 0.002, M.white);   // slice-thickness knob + index
+    Cyl(2.623, 0.925, 1.685, 0.022, 0.03, M.black, 'z');           // carriage lock knob
+    tube(2.69, 1.11, 1.655, 2.665, 1.125, 1.60, 0.015, M.black);   // carriage handle
+    Cyl(2.5431, 1.311, 1.88, 0.011, 0.022, M.black);               // blade-cover knob
+  }
   L('C04', 'Trancheuse', 2.56, 1.45, 1.90, true);
   const sh = new THREE.Group(); sh.position.set(2.60, 1.48, D); sh.rotation.x = -0.32; scene.add(sh);
   const shb = new THREE.Mesh(worldUV(new THREE.BoxGeometry(0.56, 0.025, 0.35), 0, 0, -0.175), M.inox); shb.position.set(0, 0, -0.175); shb.castShadow = true; sh.add(shb);   // UVs in metres, group frame
@@ -609,19 +760,36 @@ const W = 4.933, D = 2.184;                      // interior, metres
   const lip = new THREE.Mesh(worldUV(new THREE.BoxGeometry(0.56, 0.05, 0.02), 0, 0.02, -0.35), M.inox); lip.position.set(0, 0.02, -0.35); sh.add(lip);
   for (const x of [-0.24, 0.24]) B(2.60 + x - 0.015, 1.30, 2.05, 0.03, 0.18, 0.13, M.inoxDark);
   // V8.5 : C03 x 2 (devis : 2 étagères 300 x 600) = la vue 3D du PDF montre une étagère plate au-dessus de l'inclinée à bacs GN
-  B(2.30, 1.85, D - 0.30, 0.60, 0.025, 0.30, M.inox); for (const x of [2.36, 2.815]) { B(x, 1.825, D - 0.28, 0.025, 0.025, 0.28, M.inoxDark); B(x, 1.67, D - 0.03, 0.025, 0.18, 0.03, M.inoxDark); }
+  // V9.4 : flat shelf = TOURNUS 503429 (Gafic D12365 : 300 x 600, 12/10 stainless, upstand set back 40 mm for pipes, triangular end cheeks).
+  // Plain folded sheet: modelled in 3D from the datasheet, no photo (the Gafic photo is a 3/4 view and would add nothing on bare stainless)
+  B(2.30, 1.872, D - 0.30, 0.60, 0.003, 0.26, M.inox); B(2.30, 1.835, D - 0.30, 0.60, 0.037, 0.003, M.inox); B(2.30, 1.875, D - 0.043, 0.60, 0.045, 0.003, M.inox);   // plate, 40 mm front fold, rear upstand
+  { const s = new THREE.Shape(); s.moveTo(D, 1.872); s.lineTo(D - 0.297, 1.872); s.lineTo(D - 0.297, 1.84); s.lineTo(D - 0.07, 1.67); s.lineTo(D, 1.67);   // end cheek profile in (z, y)
+    for (const x of [2.303, 2.90]) { const g = new THREE.ExtrudeGeometry(s, { depth: 0.003, bevelEnabled: false }); g.rotateY(-Math.PI / 2); const m = new THREE.Mesh(g, M.inox); m.position.x = x; m.castShadow = m.receiveShadow = true; scene.add(m); } }
   L('C03', 'Étagère murale inclinée ×2', 2.60, 2.0, 1.95);
   // C01 back-bar fridge, 3 glass doors, bottles; C02 coffee machine on top
-  B(2.888, 0.10, 1.60, 1.346, 0.76, 0.56, M.black, true); B(2.90, 0.14, 1.62, 1.32, 0.68, 0.50, M.fridgeIn); legs(2.888, 1.60, 4.234, 2.16, 0.10, 0.03);
+  // V9.4 : existing fridge of unknown brand -> representative model Coreco ERH-350-L (Gafic CODIGEL, 1372 x 552 x 850, 3 hinged glass doors). Gafic photo
+  // (sources/gafic/c01) rectified by a 4-point perspective warp, maker's logo painted out; it dresses only the opaque parts (top band with locks and
+  // thermostat, door frames, louvred kick plate). Hollow cabinet with a lit liner: the former solid black box hid the bottles, they now show through the glass.
+  const f01 = { x0: 2.888, x1: 4.234, y0: 0.04, y1: 0.852, mat: facadeMat('c01_front.jpg') };   // texture 1000 x 603 px = 1.346 x 0.812 m (body above 40 mm feet)
+  FB(f01, 2.888, 0.782, 1.60, 1.346, 0.07, 0.025, M.black);        // top band: locks, thermostat display
+  FB(f01, 2.888, 0.04, 1.605, 1.346, 0.0714, 0.02, M.black);       // louvred kick plate, set back 5 mm
+  B(2.888, 0.80, 1.625, 1.346, 0.052, 0.535, M.black); B(2.888, 0.04, 1.625, 1.346, 0.075, 0.535, M.black);   // cabinet top, machine compartment
+  for (const x of [2.888, 4.214]) B(x, 0.115, 1.62, 0.02, 0.685, 0.54, M.black);                              // cabinet sides
+  B(2.908, 0.115, 2.12, 1.306, 0.685, 0.04, M.fridgeIn); B(2.908, 0.115, 1.625, 1.306, 0.005, 0.495, M.fridgeIn); B(2.908, 0.794, 1.625, 1.306, 0.006, 0.495, M.fridgeIn);   // lit liner: back, floor, ceiling
+  for (const x of [2.908, 4.206]) B(x, 0.12, 1.625, 0.008, 0.674, 0.495, M.fridgeIn);                          // liner sides
   const bl = [];
-  for (let d = 0; d < 3; d++) {
-    const x0 = 2.90 + d * 0.4487;
-    B(x0 + 0.02, 0.14, 1.594, 0.41, 0.68, 0.008, M.glass); handleV(x0 + 0.05, 0.30, 1.594, 0.30); B(x0 + 0.03, 0.80, 1.63, 0.39, 0.006, 0.02, M.lamp);
-    for (let s = 0; s < 3; s++) { B(x0 + 0.02, 0.16 + s * 0.22, 1.63, 0.41, 0.008, 0.44, M.inoxDark);
-      for (let b = 0; b < 6; b++) for (let r = 0; r < 2; r++) bl.push([x0 + 0.055 + b * 0.067, 0.168 + s * 0.22, 1.69 + r * 0.075, d * 2 + s * 3 + r]); }
-  }
-  bottles(bl); display(2.98, 0.12, 1.594, 0.05, 0.016, M.tempB);   // 108 bottles of 6 kinds (instanced), blue temperature display
-  for (let d = 0; d <= 3; d++) B(2.888 + d * 0.4487 - 0.01, 0.10, 1.59, 0.02, 0.76, 0.02, M.black);
+  [[2.888, 2.9432, 3.2851, 3.343], [3.343, 3.3928, 3.7333, 3.7898], [3.7898, 3.8396, 4.1761, 4.234]].forEach(([a, g0, g1, b], d) => {   // door x0, glass x0, glass x1, door x1
+    FB(f01, a, 0.7335, 1.594, b - a, 0.0485, 0.026, M.black); FB(f01, a, 0.1114, 1.594, b - a, 0.0202, 0.026, M.black);     // door rails
+    FB(f01, a, 0.1316, 1.594, g0 - a, 0.6019, 0.026, M.black); FB(f01, g1, 0.1316, 1.594, b - g1, 0.6019, 0.026, M.black);   // door stiles
+    B(g0, 0.1316, 1.605, g1 - g0, 0.6019, 0.006, M.glass); B(g0 + 0.01, 0.788, 1.64, g1 - g0 - 0.02, 0.006, 0.02, M.lamp);   // glass, light strip
+    for (let s = 0; s < 3; s++) { if (s) B(g0 - 0.025, 0.111 + s * 0.218, 1.63, g1 - g0 + 0.05, 0.008, 0.475, M.inoxDark);   // 2 wire shelves + floor
+      for (let k = 0; k < 6; k++) for (let r = 0; r < 2; r++) bl.push([(g0 + g1) / 2 + (k - 2.5) * 0.067, 0.12 + s * 0.218, 1.69 + r * 0.075, d * 2 + s * 3 + r]); }
+  });
+  bottles(bl);   // 108 bottles of 6 kinds (instanced)
+  B(3.760, 0.5275, 1.566, 0.045, 0.2464, 0.028, M.black); B(3.311, 0.5315, 1.566, 0.037, 0.2424, 0.028, M.black);   // profile door handles, as on the photo
+  for (const x of [3.9069, 3.6620, 3.2110]) Cyl(x, 0.809, 1.596, 0.008, 0.008, M.chrome, 'z');                      // door locks
+  for (const x of [2.92, 4.20]) for (const z of [1.64, 2.12]) Cyl(x, 0.02, z, 0.018, 0.04, M.black);               // feet
+  addObs(2.888, 1.60, 4.234, 2.16);
   L('C01', 'Arrière-bar réfrigéré 3 portes', 3.56, 0.70, 1.56, true);
   // C02 espresso machine, 3 groups (V9.3): front photo of a Faema E98 UP 3 groups (sources/web/c02) on its relief: base, drip-tray grille,
   // backsplash set back 17 cm, black side cheeks, 3 protruding groups with portafilters, control band, cup deck with rails, feet
@@ -648,32 +816,80 @@ const W = 4.933, D = 2.184;                      // interior, metres
 
 // ---------- North side (bar): C16, C17, C18, C19, C20 ----------
 {
-  B(1.20, 0.12, 0, 1.00, 0.78, 0.60, M.inox, true); legs(1.20, 0, 2.20, 0.60, 0.12);
-  B(1.21, 0.16, 0.60, 0.49, 0.68, 0.012, M.inoxDoor); B(1.70, 0.16, 0.585, 0.49, 0.68, 0.012, M.inoxDoor);
-  B(1.56, 0.45, 0.613, 0.03, 0.10, 0.004, M.black); B(1.72, 0.45, 0.598, 0.03, 0.10, 0.004, M.black);
+  // C16 REALINOX MR09 (Gafic C40992) low cupboard 1000 × 600 × 900, 2 sliding doors, top with upstand (V9.4). There is no frontal photo: Gafic only
+  // has a 3/4 CAD render with one bay open (sources/gafic/c16), so it is modelled on that render's proportions: 40 mm top, ~140 mm upstand,
+  // ~140 mm round legs, front frame with a deep top rail (door track), 2 full-height sliding doors with a folded-edge grip
+  B(1.20, 0.86, 0, 1.00, 0.04, 0.60, M.inox); B(1.20, 0.90, 0, 1.00, 0.14, 0.03, M.inox); addObs(1.20, 0, 2.20, 0.60);   // top, upstand
+  B(1.208, 0.14, 0, 0.984, 0.72, 0.56, M.inox); legs(1.208, 0, 2.192, 0.56, 0.14, 0.045);                             // carcass, adjustable legs
+  B(1.208, 0.14, 0.56, 0.984, 0.025, 0.03, M.inox); B(1.208, 0.80, 0.56, 0.984, 0.06, 0.03, M.inox);                  // bottom rail, top rail (track)
+  for (const x of [1.208, 2.172]) B(x, 0.165, 0.56, 0.02, 0.635, 0.03, M.inox);                                        // side posts
+  B(1.228, 0.168, 0.565, 0.494, 0.629, 0.01, M.inoxDoor); B(1.678, 0.168, 0.577, 0.494, 0.629, 0.01, M.inoxDoor);     // rear (west) and front (east) doors
+  for (const [x, z] of [[1.232, 0.575], [1.682, 0.587]]) { B(x, 0.168, z, 0.006, 0.629, 0.002, M.black); B(x + 0.006, 0.168, z, 0.012, 0.629, 0.01, M.inoxDoor); }   // folded-edge grips
   L('C16', 'Meuble portes coulissantes', 1.70, 1.15, 0.30);
-  // C17 dishwasher under the sink table drainboard
-  B(2.20, 0.10, 0.02, 0.60, 0.74, 0.58, M.inox, true); B(2.21, 0.12, 0.60, 0.58, 0.60, 0.012, M.inoxDoor); B(2.21, 0.74, 0.60, 0.58, 0.09, 0.012, M.panel);
-  B(2.26, 0.68, 0.612, 0.48, 0.02, 0.02, M.chrome); display(2.33, 0.785, 0.612, 0.06, 0.022, M.tempR, '+z'); Cyl(2.46, 0.785, 0.614, 0.009, 0.006, M.white, 'z'); Cyl(2.50, 0.785, 0.614, 0.009, 0.006, M.pilotG, 'z');
+  // C17 dishwasher under the sink-table drainboard (V9.4): VEETSAN 400341, 572 × 623 × 840 = body of the Electrolux Professional NeoBlue Touch L front
+  // loader; its front photo (PH_400301, sources/web/c17) on the relief: carcass, black touch band, door, handle bezel and grip, kick panel, feet.
+  // 2.8 cm further east than before so that it fits between the square legs of C18.
+  const f17 = { x0: 2.242, x1: 2.814, y0: 0, y1: 0.8363, mat: facadeMat('c17_front.jpg'), face: '+z' };   // photo 647 × 946 px = 0.572 × 0.836 m
+  FB(f17, 2.242, 0.0124, 0, 0.572, 0.8239, 0.59, M.inox); addObs(2.20, 0.02, 2.80, 0.60);                   // carcass (frame strips and base show on its front)
+  FB(f17, 2.242, 0.7630, 0.59, 0.572, 0.0733, 0.016, M.black);                                                // touch-control band
+  FB(f17, 2.2486, 0.3032, 0.59, 0.5597, 0.4518, 0.021, M.inoxDoor);                                           // door
+  FB(f17, 2.3543, 0.6914, 0.611, 0.3483, 0.0371, 0.012, M.black); FB(f17, 2.3781, 0.6551, 0.611, 0.2989, 0.0363, 0.008, M.black);   // handle bezel, grip
+  FB(f17, 2.242, 0.0239, 0.59, 0.572, 0.274, 0.013, M.inoxDoor);                                              // kick panel
+  for (const x of [2.2858, 2.7707]) for (const z of [0.05, 0.54]) Cyl(x, 0.0062, z, 0.0137, 0.0124, M.black);   // feet
   L('C17', 'Lave-vaisselle', 2.50, 1.1, 0.30);
-  // C18 sink table: top with a bowl hole, bowl, tap, backsplash, legs
+  // C18 REALINOX table du chef adossée 15/10, square legs, bowl on the right (E34339, 1200 × 600 × 900) (V9.4): Gafic has no picture of this ref, only
+  // the 3/4 CAD render of the central version (sources/gafic/c18); modelled on it: 40 mm top with the bowl hole, upstand as C16, 4 square legs on
+  // adjustable feet (C17 fits between the west ones), rails, deep-drawn bowl with drain and overflow pipe, gooseneck mixer, drainboard ribs
   const s = new THREE.Shape(); s.moveTo(0, 0); s.lineTo(1.2, 0); s.lineTo(1.2, 0.6); s.lineTo(0, 0.6); s.closePath();
   const hole = new THREE.Path(); hole.moveTo(0.72, 0.10); hole.lineTo(1.12, 0.10); hole.lineTo(1.12, 0.52); hole.lineTo(0.72, 0.52); hole.closePath(); s.holes.push(hole);
   const top = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.04, bevelEnabled: false }), M.inox);
   top.rotation.x = -Math.PI / 2; top.position.set(2.20, 0.86, 0.60); top.castShadow = top.receiveShadow = true; scene.add(top); addObs(2.20, 0, 3.40, 0.60);
-  B(2.92, 0.62, 0.08, 0.40, 0.01, 0.42, M.inoxDark); B(2.92, 0.62, 0.08, 0.01, 0.24, 0.42, M.inoxDark); B(3.31, 0.62, 0.08, 0.01, 0.24, 0.42, M.inoxDark); B(2.92, 0.62, 0.08, 0.40, 0.24, 0.01, M.inoxDark); B(2.92, 0.62, 0.49, 0.40, 0.24, 0.01, M.inoxDark);
-  Cyl(3.12, 1.02, 0.05, 0.012, 0.24, M.chrome); B(3.11, 1.13, 0.05, 0.02, 0.02, 0.20, M.chrome); B(3.10, 1.08, 0.235, 0.04, 0.05, 0.02, M.chrome);
-  B(2.20, 0.90, 0, 1.20, 0.10, 0.03, M.inox);
-  for (let i = 0; i < 5; i++) B(2.30 + i * 0.09, 0.9005, 0.12, 0.02, 0.003, 0.36, M.plate);
-  B(3.36, 0, 0.04, 0.03, 0.86, 0.03, M.inoxDark); B(3.36, 0, 0.55, 0.03, 0.86, 0.03, M.inoxDark);
+  B(2.92, 0.62, 0.08, 0.40, 0.01, 0.42, M.inox); for (const x of [2.92, 3.31]) B(x, 0.63, 0.08, 0.01, 0.23, 0.42, M.inox);   // bowl: bottom, sides
+  for (const z of [0.08, 0.49]) B(2.93, 0.63, z, 0.38, 0.23, 0.01, M.inox);                                   // bowl: back, front
+  Cyl(3.12, 0.6315, 0.29, 0.03, 0.003, M.plate); Cyl(3.12, 0.633, 0.29, 0.012, 0.002, M.black); Cyl(2.955, 0.715, 0.12, 0.012, 0.17, M.inox);   // drain, overflow pipe
+  Cyl(3.12, 0.905, 0.05, 0.02, 0.01, M.chrome); Cyl(3.12, 0.965, 0.05, 0.02, 0.11, M.chrome); Cyl(3.12, 1.07, 0.05, 0.011, 0.10, M.chrome);   // mixer: rosette, body, riser
+  tube(3.135, 0.995, 0.05, 3.205, 1.03, 0.05, 0.006, M.chrome);                                                // single lever
+  const neck = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.011, 12, 40, Math.PI), M.chrome);               // gooseneck spout, arc in the y-z plane
+  neck.rotation.y = -Math.PI / 2; neck.position.set(3.12, 1.12, 0.14); neck.castShadow = true; scene.add(neck); Cyl(3.12, 1.10, 0.23, 0.013, 0.04, M.chrome);   // + aerator
+  B(2.20, 0.90, 0, 1.20, 0.14, 0.03, M.inox);                                                                  // upstand
+  for (let i = 0; i < 5; i++) B(2.30 + i * 0.09, 0.9005, 0.12, 0.02, 0.003, 0.36, M.inoxDark);                 // drainboard ribs
+  for (const x of [2.204, 3.361]) for (const z of [0.012, 0.553]) { B(x, 0.03, z, 0.035, 0.83, 0.035, M.inox); Cyl(x + 0.0175, 0.018, z + 0.0175, 0.012, 0.024, M.inoxDark); Cyl(x + 0.0175, 0.004, z + 0.0175, 0.019, 0.008, M.black); }   // square legs, feet
+  for (const x of [2.2115, 3.3685]) B(x, 0.80, 0.047, 0.02, 0.06, 0.506, M.inox); B(2.83, 0.80, 0.56, 0.531, 0.06, 0.02, M.inox);   // side rails, front rail east of C17
   L('C18', 'Table plonge 1 bac', 3.10, 1.15, 0.30);
   // existing counter at the east end, glasswasher under it, keg, beer font on top
   B(3.40, 0.86, 0, 1.533, 0.04, 0.60, M.laminate, true); for (const [x, z] of [[3.42, 0.04], [3.42, 0.55], [4.90, 0.04], [4.90, 0.55]]) B(x, 0, z, 0.03, 0.86, 0.03, M.inoxDark);
-  B(3.46, 0, 0.09, 0.42, 0.70, 0.51, M.inox); B(3.47, 0.02, 0.60, 0.40, 0.56, 0.012, M.inoxDoor); B(3.47, 0.60, 0.60, 0.40, 0.09, 0.012, M.panel); B(3.52, 0.55, 0.612, 0.30, 0.02, 0.02, M.chrome); display(3.56, 0.645, 0.612, 0.05, 0.02, M.tempR, '+z');
+  // C19 glasswasher (V9.3 photo facade, staff side +z): Codigel ECO35 / Adler 35x35 (Gafic A43938, sources/gafic/c19), photo 787 × 1061 px = 0.42 × 0.566 m
+  // body on 0.081 m feet (datasheet 430 × 485 × 660 incl. feet); head, door and kick panel cut to the photo's relief, carcass set back behind them
+  const f19 = { x0: 3.46, x1: 3.88, y0: 0.0788, y1: 0.645, face: '+z', mat: facadeMat('c19_front.jpg') };
+  B(3.464, 0.081, 0.115, 0.412, 0.562, 0.47, M.inox);                  // carcass: sides and top
+  FB(f19, 3.46, 0.5868, 0.58, 0.42, 0.0582, 0.020, M.inox);             // control head (front z 0.600)
+  FB(f19, 3.4616, 0.2960, 0.58, 0.4141, 0.2903, 0.026, M.inox);         // door with its top grip (front z 0.606)
+  FB(f19, 3.46, 0.0788, 0.58, 0.42, 0.2161, 0.014, M.inox);             // kick panel (front z 0.594)
+  legs(3.46, 0.115, 3.88, 0.585, 0.081, 0.03);
   L('C19', 'Lave-verres', 3.67, 0.85, 0.30, true);
-  Cyl(4.45, 0.25, 0.32, 0.20, 0.50, M.inoxDark); Cyl(4.45, 0.08, 0.32, 0.205, 0.03, M.black); Cyl(4.45, 0.42, 0.32, 0.205, 0.03, M.black);
-  B(4.31, 0.90, 0.13, 0.51, 0.03, 0.39, M.inoxDark); B(4.33, 0.93, 0.26, 0.47, 0.005, 0.24, M.plate);
-  for (const x of [4.40, 4.565, 4.73]) { Cyl(x, 1.10, 0.20, 0.03, 0.36, M.inox); B(x - 0.012, 1.24, 0.22, 0.024, 0.11, 0.024, M.black); B(x - 0.03, 1.25, 0.17, 0.06, 0.02, 0.06, M.inoxDark); }
+  // keg under the counter (same place and size as before): stainless lathe with rolling rings and chimes, coupler, beer line up to the font
+  { const prof = [[0, 0.004], [0.17, 0.004], [0.186, 0], [0.19, 0.004], [0.19, 0.062], [0.181, 0.072], [0.193, 0.092], [0.199, 0.12], [0.205, 0.128], [0.205, 0.138], [0.199, 0.146], [0.199, 0.354], [0.205, 0.362], [0.205, 0.372], [0.199, 0.38], [0.193, 0.408], [0.181, 0.428], [0.19, 0.438], [0.19, 0.496], [0.186, 0.5], [0.182, 0.496], [0.182, 0.446], [0.16, 0.442], [0.09, 0.455], [0.03, 0.46], [0, 0.46]];
+    const k = new THREE.Mesh(new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 48), M.inox); k.position.set(4.45, 0, 0.32); k.castShadow = k.receiveShadow = true; scene.add(k); }
+  Cyl(4.45, 0.468, 0.32, 0.034, 0.016, M.chrome); Cyl(4.45, 0.50, 0.32, 0.024, 0.05, M.chrome); Cyl(4.45, 0.535, 0.32, 0.008, 0.02, M.chrome); Cyl(4.478, 0.505, 0.32, 0.007, 0.03, M.chrome, 'x');
+  tube(4.45, 0.518, 0.33, 4.45, 0.526, 0.43, 0.006, M.chrome); Cyl(4.45, 0.526, 0.44, 0.012, 0.022, M.black, 'z');   // coupler lever
+  tube(4.45, 0.545, 0.32, 4.53, 0.70, 0.25, 0.005, M.black); tube(4.53, 0.70, 0.25, 4.565, 0.86, 0.22, 0.005, M.black);   // beer line
+  // C20 beer font (V9.3 photo facade, staff side +z): LINDR GRAND 3 tower, black top (sources/web/c20, spin frame f22), photo 730 × 936 px = 0.407 × 0.522 m
+  // base plate, column (photo on its front half), polished T-bar and black cap; the 3 compensator taps are real geometry on the photo's tap axes
+  const f20 = { x0: 4.3614, x1: 4.7686, y0: 0.90, y1: 1.4220, face: '+z', mat: facadeMat('c20_front.jpg') };
+  FB(f20, 4.5064, 0.90, 0.162, 0.116, 0.0201, 0.116, M.chrome);                 // base plate
+  { const half = (t0, mat) => { const g = new THREE.CylinderGeometry(0.0441, 0.0441, 0.326, 32, 1, true, t0, Math.PI); if (mat === f20.mat) project(g, f20, [4.565, 1.081, 0.22]);
+      const m = new THREE.Mesh(g, mat); m.position.set(4.565, 1.081, 0.22); m.castShadow = m.receiveShadow = true; scene.add(m); };
+    half(-Math.PI / 2, f20.mat); half(Math.PI / 2, M.chrome); }                  // column ø 88 mm: photo on the +z half, chrome behind
+  FB(f20, 4.3631, 1.2430, 0.159, 0.4032, 0.0891, 0.122, M.inox);              // polished T-bar (front z 0.281), runs 1 mm into the cap
+  FB(f20, 4.3625, 1.3311, 0.157, 0.4050, 0.0245, 0.126, M.black);             // black top cap
+  const gH20 = new THREE.CylinderGeometry(0.0155, 0.0085, 0.098, 20).scale(1, 1, 0.6);   // flat tapered tap handle
+  for (const x of [4.411, 4.565, 4.717]) {   // tap axes measured on the photo (0.153 m apart)
+    Cyl(x, 1.285, 0.300, 0.009, 0.040, M.chrome, 'z'); Cyl(x, 1.281, 0.326, 0.012, 0.072, M.chrome); Cyl(x, 1.318, 0.326, 0.0105, 0.010, M.chrome);   // shank, body, collar
+    Cyl(x + 0.024, 1.284, 0.326, 0.009, 0.026, M.chrome, 'x'); tube(x + 0.037, 1.284, 0.326, x + 0.041, 1.266, 0.334, 0.003, M.chrome);   // flow compensator + lever
+    Cyl(x, 1.219, 0.326, 0.0053, 0.052, M.chrome);                               // spout (tip at 1.193)
+    const h = new THREE.Mesh(gH20, M.black); h.position.set(x, 1.372, 0.326); h.castShadow = true; scene.add(h);
+  }
+  B(4.33, 0.90, 0.286, 0.47, 0.022, 0.16, M.inoxDark); B(4.345, 0.918, 0.296, 0.44, 0.0055, 0.14, M.grille);   // drip tray + grille under the spouts
   L('C20', 'Tireuse à bière', 4.565, 1.5, 0.33, true);
 }
 
@@ -719,7 +935,7 @@ captureEnv();
 // The real-time sun and lamps keep their direct light and shadows; on a baked surface the lightmap replaces the hemisphere light and the
 // diffuse part of the environment (both flat, blind to occlusion). A mesh is found again by material, vertex count and world box: one
 // changed in the code no longer matches and keeps the old lighting until the next bake (tools/bake/README.md). ?nolm = without, to compare.
-const LMV = 1;   // bump with each new bake (same file names: the service worker must not serve the old ones)
+const LMV = 2;   // bump with each new bake (same file names: the service worker must not serve the old ones)
 const MKEY = new Map(Object.entries(M).map(([k, m]) => [m, k]));
 const lmKey = o => `${MKEY.get(o.material) || 'x' + (o.material.color ? o.material.color.getHexString() : '')}|${o.geometry.attributes.position.count}|${o.geometry.index ? o.geometry.index.count : 0}`;
 const lmBox = o => { const b = new THREE.Box3().setFromObject(o); return [...b.min.toArray(), ...b.max.toArray()].map(v => Math.round(v * 1000)); };   // mm
