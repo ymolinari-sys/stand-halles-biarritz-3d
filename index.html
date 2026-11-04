@@ -392,6 +392,24 @@ function tube(ax, ay, az, bx, by, bz, r, mat) {   // cylinder between two points
   const d = new THREE.Vector3(bx - ax, by - ay, bz - az), m = Cyl((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2, r, d.length(), mat);
   m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return m;
 }
+// Photo facade (V9.3): the front photo of a real machine is projected straight along z onto the front of volumes cut to its relief, so it keeps
+// its depth when you walk around it. fr = { x0, x1, y0, y1, mat }: world rectangle covered by the photo, seen from −z (its left edge is at x1).
+function facadeMat(file) { const map = texLoader.load(`assets/equip/${file}`); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = MAXA; return new THREE.MeshStandardMaterial({ map, roughness: 0.5 }); }
+function project(g, fr, ox, oy, i0 = 0, i1 = g.attributes.position.count) {   // planar UVs of vertices i0..i1; ox, oy = mesh position
+  const p = g.attributes.position, uv = g.attributes.uv;
+  for (let i = i0; i < i1; i++) uv.setXY(i, (fr.x1 - ox - p.getX(i)) / (fr.x1 - fr.x0), (oy + p.getY(i) - fr.y0) / (fr.y1 - fr.y0));
+  uv.needsUpdate = true; return g;
+}
+function FB(fr, x, y, z, w, h, d, side, top = side) {   // facade box from its min corner: photo on the −z face, plain materials elsewhere
+  const g = new THREE.BoxGeometry(w, h, d); if (WUV.has(side)) worldUV(g, x + w / 2, y + h / 2, z + d / 2);
+  project(g, fr, x + w / 2, y + h / 2, 20, 24);
+  const m = new THREE.Mesh(g, [side, side, top, top, side, fr.mat]);
+  m.position.set(x + w / 2, y + h / 2, z + d / 2); m.castShadow = m.receiveShadow = true; scene.add(m); return m;
+}
+function FC(fr, cx, cy, cz, rx, ry, len) {   // elliptic cylinder along z from its centre, photo projected over it
+  const g = project(new THREE.CylinderGeometry(rx, rx, len, 32).rotateX(Math.PI / 2).scale(1, ry / rx, 1), fr, cx, cy);
+  const m = new THREE.Mesh(g, fr.mat); m.position.set(cx, cy, cz); m.castShadow = m.receiveShadow = true; scene.add(m); return m;
+}
 function cups(list) {                               // [x, y(base), z] — white espresso cups with handles, instanced (2 draw calls)
   const prof = [[0, 0], [0.026, 0], [0.028, 0.004], [0.034, 0.056], [0.036, 0.06], [0.032, 0.06], [0.03, 0.056], [0.023, 0.008], [0, 0.008]].map(([r, y]) => new THREE.Vector2(r, y));
   const gBody = new THREE.LatheGeometry(prof, 16), gHandle = new THREE.TorusGeometry(0.014, 0.0035, 6, 14), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
@@ -605,21 +623,25 @@ const W = 4.933, D = 2.184;                      // interior, metres
   bottles(bl); display(2.98, 0.12, 1.594, 0.05, 0.016, M.tempB);   // 108 bottles of 6 kinds (instanced), blue temperature display
   for (let d = 0; d <= 3; d++) B(2.888 + d * 0.4487 - 0.01, 0.10, 1.59, 0.02, 0.76, 0.02, M.black);
   L('C01', 'Arrière-bar réfrigéré 3 portes', 3.56, 0.70, 1.56, true);
-  // C02 espresso machine, 3 groups: base with clock, drip tray + grille in front, brushed body, dark control band, cup deck
+  // C02 espresso machine, 3 groups (V9.3): front photo of a Faema E98 UP 3 groups (sources/web/c02) on its relief: base, drip-tray grille,
+  // backsplash set back 17 cm, black side cheeks, 3 protruding groups with portafilters, control band, cup deck with rails, feet
   const n02 = scene.children.length;   // V8.5 : tout ce bloc est décalé de +0,25 m vers l'est après coup (plan : repère C02 à l'extrémité est de C01 ; vue 3D du PDF : machine sur la partie est du comptoir)
-  B(3.05, 0.90, 1.63, 0.90, 0.06, 0.52, M.inoxDark); B(3.06, 0.905, 1.626, 0.88, 0.05, 0.006, M.panel); display(3.10, 0.916, 1.626, 0.07, 0.022, M.clock);
-  B(3.07, 0.96, 1.64, 0.86, 0.03, 0.12, M.inoxDark); B(3.08, 0.99, 1.645, 0.84, 0.008, 0.10, M.grille);
-  B(3.05, 0.96, 1.75, 0.90, 0.26, 0.40, M.inoxMach); B(3.05, 1.22, 1.745, 0.90, 0.08, 0.405, M.panel);
-  B(3.05, 1.30, 1.73, 0.90, 0.04, 0.42, M.inox); B(3.05, 1.34, 1.73, 0.035, 0.055, 0.42, M.black); B(3.915, 1.34, 1.73, 0.035, 0.055, 0.42, M.black); Cyl(3.50, 1.345, 1.725, 0.006, 0.83, M.chrome, 'x');
-  for (let i = 0; i < 3; i++) { const x = 3.24 + i * 0.26;
-    Cyl(x, 1.10, 1.71, 0.042, 0.08, M.chrome, 'z'); Cyl(x, 1.055, 1.67, 0.038, 0.03, M.chrome); Cyl(x, 1.05, 1.655, 0.016, 0.02, M.chrome, 'z');
-    const pf = Cyl(x, 1.04, 1.595, 0.012, 0.14, M.black, 'z'); pf.rotation.x = Math.PI / 2 - 0.12;
-    B(x - 0.045, 1.235, 1.739, 0.09, 0.04, 0.006, M.black); for (let k = 0; k < 5; k++) B(x - 0.038 + k * 0.017, 1.247, 1.736, 0.011, 0.012, 0.004, k ? M.inoxDark : M.pilotG);
+  const f02 = { x0: 3.05, x1: 3.95, y0: 0.90, y1: 1.3729, mat: facadeMat('c02_front.jpg') };   // photo 1161 × 610 px = 0.90 × 0.473 m
+  FB(f02, 3.0665, 0.9333, 1.63, 0.868, 0.1008, 0.52, M.inoxMach);                    // base (drip tray front)
+  FB(f02, 3.085, 1.0341, 1.635, 0.83, 0.006, 0.165, M.inoxMach, M.grille);            // drip-tray grille
+  FB(f02, 3.0944, 1.0341, 1.80, 0.8091, 0.2131, 0.35, M.inoxMach);                    // backsplash
+  for (const x of [3.0773, 3.9035]) FB(f02, x, 1.0341, 1.635, 0.0171, 0.2131, 0.515, M.panel);   // side cheeks
+  FB(f02, 3.05, 1.2472, 1.63, 0.90, 0.0775, 0.52, M.panel);                            // control band
+  FB(f02, 3.068, 1.3247, 1.635, 0.866, 0.008, 0.515, M.inoxMach, M.grille);           // cup deck
+  B(3.068, 1.3327, 2.11, 0.866, 0.04, 0.04, M.black); for (const x of [3.075, 3.927]) Cyl(x, 1.358, 1.875, 0.005, 0.47, M.chrome, 'z');
+  Cyl(3.50, 1.358, 1.645, 0.005, 0.85, M.chrome, 'x');                                 // cup rails
+  for (const [x, ex] of [[3.342, 3.333], [3.540, 3.544], [3.7365, 3.755]]) {          // group centres and handle ends, measured on the photo
+    FC(f02, x, 1.2094, 1.7225, 0.05, 0.031, 0.155); Cyl(x, 1.168, 1.69, 0.036, 0.02, M.chrome);   // heads reach the band's front, or the band hides them from eye height
+    tube(x, 1.16, 1.69, ex, 1.11, 1.555, 0.016, M.black);
   }
-  dial(3.11, 1.26, 1.745, '-z', 0.024); dial(3.89, 1.26, 1.745, '-z', 0.024); B(3.485, 1.245, 1.739, 0.03, 0.03, 0.006, M.redBtn);
-  tube(3.12, 1.22, 1.73, 3.02, 0.99, 1.65, 0.007, M.chrome); tube(3.02, 0.99, 1.65, 3.005, 0.955, 1.64, 0.009, M.black);
-  tube(3.88, 1.22, 1.73, 3.98, 0.99, 1.65, 0.007, M.chrome); tube(3.98, 0.99, 1.65, 3.995, 0.955, 1.64, 0.009, M.black);
-  const cl = []; for (let i = 0; i < 8; i++) for (let j = 0; j < 3; j++) cl.push([3.125 + i * 0.107, 1.34, 1.79 + j * 0.12]); cups(cl);
+  for (const x of [3.113, 3.888]) tube(x, 1.24, 1.79, x, 1.075, 1.72, 0.0055, M.chrome);   // steam wands
+  for (const x of [3.167, 3.832]) for (const z of [1.67, 2.11]) Cyl(x, 0.9167, z, 0.022, 0.0333, M.chrome);
+  const cl = []; for (let i = 0; i < 8; i++) for (let j = 0; j < 3; j++) cl.push([3.125 + i * 0.107, 1.3327, 1.79 + j * 0.12]); cups(cl);
   for (let i = n02; i < scene.children.length; i++) scene.children[i].position.x += 0.25;   // V8.5 : machine à café de 3,30 à 4,20 m
   L('C02', 'Machine à café', 3.75, 1.6, 1.90, true);
 }
